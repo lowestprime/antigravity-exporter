@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0rc3 — repository and release maintenance
+
+- Repair PUBLIC_FILES.json after the reviewed checkout/setup-python updates were
+  merged; retain pinned action SHAs and the fail-closed public-file guard.
+- Identify changed/added/removed public paths in manifest-mismatch diagnostics.
+- Publish a new version automatically when its reviewed version bump reaches
+  main, only after the complete validation matrix and distribution checks pass.
+- Create an annotated version tag without moving existing tags; verify uploaded
+  asset size/digests before publishing the draft. Preserve published assets on
+  retries. Existing rc2 artifacts remain unchanged.
+- Use version-specific release notes, update post-publication validation evidence,
+  and document branch-aware dependency maintenance and safe retry behavior.
+- Export rendering, compression defaults, source preservation and saved settings
+  are unchanged apart from reporting the new package version.
+
 ## 0.3.0rc2 — public-release preparation
 
 - Fix Windows source capture to permit owner-driven rotation without granting the

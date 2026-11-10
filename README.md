@@ -3,10 +3,16 @@
 Read-only exports of local Antigravity conversations: Markdown, original JSONL,
 SQLite coverage diagnostics, verified ZIP archives, and PowerShell helpers.
 
-**Version: 0.3.0rc2 (prerelease).** This is an independent tool, not a Google
+**Version: 0.3.0rc3 (prerelease).** This is an independent tool, not a Google
 product. Supported storage layouts have been observed in Antigravity 2.24–2.29;
 that is not a guarantee for future proprietary storage changes. It is not an API
 client and does not submit prompts, consume model quota, or require account tokens.
+
+The rc2 release passed the public Windows/macOS/Linux validation matrix and
+real Windows LZMA integration. See [validation history](docs/VALIDATION.md).
+The rc3 maintenance release repairs workflow/manifest drift and adds gated
+publication after a reviewed version bump reaches `main`; it does not change
+export formats, compression defaults, or user configuration.
 
 ## Install or use the portable source
 

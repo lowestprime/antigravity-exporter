@@ -1,6 +1,6 @@
-# 0.3.0rc2 validation and release boundary
+# Validation history and release boundary
 
-## Executed locally
+## Historical rc2 preparation: executed locally
 
 Runtime: Linux, CPython 3.13.5. The full `unittest` suite collected **121 tests**:
 **120 passed; one Windows-specific test was skipped**. The optional real-archive
@@ -44,7 +44,7 @@ handoff index. It used Python DEFLATE level 6, no tokenization, and completed in
 2.214 seconds on this host. Redirected progress produced 43 lines across 21 stages.
 This is not a Windows/LZMA benchmark or a speedup comparison against another tool.
 
-## Not yet established by this build
+## Historical rc2 preparation limitations (superseded where noted below)
 
 - Successful execution of rc2 on the user's Windows machine or Windows CI.
 - A real external 7-Zip encoder run in the Linux build environment.
@@ -72,3 +72,27 @@ intentional source edit, review it and regenerate the public allowlist with
 
 Release candidates use `rc` versions and prereleases. A failed test is a release
 blocker, not grounds for relabeling the package stable or overwriting an old tag.
+
+## Post-publication evidence — 2026-11-10
+
+The original rc2 release is associated with commit
+`a78f5558a022d81c38bc6a1e8bf75fc003918387` and successful release run
+[42777739450](https://github.com/lowestprime/antigravity-exporter/actions/runs/42777739450).
+All six OS/Python jobs, package validation and publication succeeded. Windows
+PowerShell validation passed; the Windows/Python 3.13 job also passed the real
+7-Zip/LZMA integration step. The owner separately reported 121 local Windows
+tests with one optional private-fixture skip and a verified real-conversation
+archive. No private transcript or identifying fixture is published here.
+
+PRs #1 and #2 subsequently updated pinned action revisions without refreshing
+the checked public-source manifest. Main run
+[42779764222](https://github.com/lowestprime/antigravity-exporter/actions/runs/42779764222)
+failed at the public-file guard. Refreshing an unchanged local main checkout
+cannot repair a different server-side revision. Rc3 reconciles the reviewed
+remote files and manifest together; it does not disable the guard.
+
+Rc3 adds synthetic tests for publication event/ref restrictions, exact asset
+inventories/checksums, version consistency, version-specific notes and immutable
+release handling. Consult the rc3 workflow linked from its release for the
+actual remote results; the historical rc2 pass does not certify later commits.
+Optional private-fixture, tokenizer and GUI tests retain their stated limits.
