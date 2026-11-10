@@ -26,23 +26,30 @@ local commit or an empty server-side repository. Inspect `git status`, `git remo
 -v`, and `gh repo view` before resuming manually; do not delete or force-reset an
 unfamiliar existing repository.
 
-## First prerelease
+## Automatic releases from reviewed version bumps
 
-```powershell
-Set-Location C:\projects\antigravity-exporter
-.\New-AntigravityRelease.ps1
-```
+Bump both `antigravity_exporter/__init__.py` and `pyproject.toml`, add a
+version-specific CHANGELOG.md section, review/refresh PUBLIC_FILES.json, and merge
+only after CI passes. A push to main changing a version file runs release.yml.
+Publication has `needs: validate`: it waits for six OS/Python jobs, Windows
+PowerShell/real-LZMA checks and distribution validation. It creates an annotated
+tag for that exact commit, uploads four checked assets to a draft, verifies their
+reported digests/sizes, and publishes. RC versions remain prereleases.
 
-The script requires a clean main worktree, remote main equal to local HEAD, and a
-successful `ci.yml` run for that exact SHA. It creates an annotated `vVERSION`
-tag. The tag-triggered release workflow reruns the six OS/Python test jobs and
-package validation; publication has `needs: validate`. It then builds a wheel,
-source distribution, portable ZIP and SHA256SUMS. Release candidates are marked
-prerelease and `latest=false`. An existing tag/release is never overwritten.
+The same job creates the tag and publishes; it does not rely on a tag pushed with
+GITHUB_TOKEN triggering another workflow. Existing published assets and tags are
+never overwritten. A different commit using an existing version is rejected.
 
-The scripts/workflows are provided, not evidence of a completed GitHub run.
-Inspect the actual Actions result and release assets. Do not label rc2 stable
-until its Windows regression and real encoder smoke test have passed.
+`New-AntigravityRelease.ps1` remains an optional tag-based route for older setups.
+Do not race it against automatic publication or recreate an existing version.
+For a transient failure, inspect the run and rerun failed jobs. Manual dispatch
+is restricted to main. If a draft already contains assets with different hashes,
+publication stops for maintainer review instead of replacing them silently.
+The workflow only has write access in the publish job, never in PR validation.
+
+The published rc2 release and its validated assets remain unchanged; subsequent
+maintenance is released under a new version. This is not a claim that server-side
+branch protection or release immutability has been administratively configured.
 
 ## Ongoing maintenance
 
@@ -62,7 +69,8 @@ gh pr create --base main
 
 Review the staged content before committing. Merge only after CI passes. Bump
 both package version declarations, update CHANGELOG.md, refresh the public
-allowlist, commit and push main, then use the release script. Never force-push
+allowlist, commit on a PR branch and merge after CI; the reviewed version-file change
+starts automatic release validation. Never force-push
 published tags or upload private archives as debugging fixtures.
 
 After repository creation, the owner should enable a main-branch ruleset requiring
@@ -85,3 +93,15 @@ Official command references:
 - https://cli.github.com/manual/gh_run_watch
 - https://cli.github.com/manual/gh_release_create
 - https://docs.github.com/en/actions/reference/security/secure-use
+
+## Dependency PRs and the public manifest
+
+Use a dedicated PR branch, not an unchanged main checkout. Check `git branch
+--show-current` and the proposed files before refreshing. Review workflow action
+pins and release notes, run `python tools/public_release.py --refresh`, commit
+PUBLIC_FILES.json alongside the intended change, and run
+`python tools/public_release.py --tracked`. Rebase/merge the latest main and
+refresh again when another PR changed a covered file. Require fresh CI before
+merging. Never refresh automatically inside an ordinary CI check: that would
+accept content not represented by the reviewed manifest. Failed historical runs
+are retained as an audit trail rather than deleted to conceal their results.

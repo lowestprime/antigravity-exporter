@@ -44,7 +44,13 @@ def check(refresh=False,tracked=False):
     if refresh:
         MANIFEST.write_text(json.dumps({'schema':'public-source-allowlist/1','files':actual},indent=2,sort_keys=True)+'\n',encoding='utf-8',newline='\n')
     expected=json.loads(MANIFEST.read_text(encoding='utf-8'))['files']
-    if actual!=expected:raise ValueError('Public source differs from PUBLIC_FILES.json; review then explicitly --refresh')
+    if actual!=expected:
+        changed=sorted(p for p in actual.keys() & expected.keys() if actual[p]!=expected[p])
+        added=sorted(actual.keys()-expected.keys());removed=sorted(expected.keys()-actual.keys())
+        detail='; '.join(label+': '+', '.join(paths) for label,paths in
+                        [('changed',changed),('added',added),('removed',removed)] if paths)
+        raise ValueError('Public source differs from PUBLIC_FILES.json ('+detail+
+                         '); review the intended branch changes, then explicitly --refresh')
     if tracked:
         output=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
         if set(filter(None,output))!=set(expected)|{'PUBLIC_FILES.json'}:raise ValueError('Tracked paths do not match public allowlist')

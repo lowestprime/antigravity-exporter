@@ -1,14 +1,20 @@
 name: release
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths:
+      - antigravity_exporter/__init__.py
+      - pyproject.toml
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-publication
   cancel-in-progress: false
 jobs:
   validate:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     uses: ./.github/workflows/validate.yml
   publish:
     needs: validate
@@ -22,28 +28,13 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
-      - name: Validate immutable tag matches package version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          python - <<'PY'
-          import os
-          from antigravity_exporter import __version__
-          if os.environ['RELEASE_TAG'] != 'v'+__version__:
-              raise SystemExit('Tag/package version mismatch')
-          PY
       - run: python tools/public_release.py --tracked
       - run: python -m pip install 'build>=1.2,<2' 'twine>=6,<7'
       - run: python -m build
       - run: python tools/public_release.py --build
       - run: python -m twine check dist/*.whl dist/*.tar.gz
-      - name: Publish checked distributions (RC tags remain prereleases)
+      - name: Publish checked distributions without replacing existing releases
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          args=(--verify-tag --title "Antigravity Exporter ${RELEASE_TAG#v}" --notes-file CHANGELOG.md)
-          if [[ "$RELEASE_TAG" == *rc* ]]; then args+=(--prerelease --latest=false); fi
-          gh release create "$RELEASE_TAG" dist/* "${args[@]}"
+        run: python tools/publish_github_release.py
