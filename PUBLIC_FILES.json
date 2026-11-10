@@ -1,0 +1,169 @@
+{
+  "files": {
+    ".gitattributes": {
+      "bytes": 127,
+      "sha256": "65f7e268de95e2bdcb74e7a446a4b61fd01397351812c5e46b08d04a47c43794"
+    },
+    ".github/CODEOWNERS": {
+      "bytes": 15,
+      "sha256": "46506c87aafe95c68741dd2209e1ee0b1a139cf5bc655803a2797bc07dbcd1fe"
+    },
+    ".github/ISSUE_TEMPLATE/bug_report.md": {
+      "bytes": 420,
+      "sha256": "0684ff98b819465d6c47392456219eaf6d54dc3158241f19348735d2d028e266"
+    },
+    ".github/dependabot.yml": {
+      "bytes": 193,
+      "sha256": "408abbeb3fb78cce167b200431268e3cc47b40b7b6ba0f158c9a819a571bde99"
+    },
+    ".github/pull_request_template.md": {
+      "bytes": 417,
+      "sha256": "df426a0f7af0d33d7e66bf02799e2162dbf51c0e28daee3112693b4c7bd99169"
+    },
+    ".github/workflows/ci.yml": {
+      "bytes": 240,
+      "sha256": "6da0322266e708fd5c89b5b915da643aaec5a6190c2ff2997c23bb879d4886c7"
+    },
+    ".github/workflows/release.yml": {
+      "bytes": 1719,
+      "sha256": "043342500c0399bfa023b54637a5b062c81c6ddbd3e729e72cf1602aed67b343"
+    },
+    ".github/workflows/validate.yml": {
+      "bytes": 2146,
+      "sha256": "6d80f8af344ec84967e77ee919ac9d1c705e54c00db7966fda0ca1922591f836"
+    },
+    ".gitignore": {
+      "bytes": 226,
+      "sha256": "8c4d1b6f5b42618cd8c388068c63342e31e3b09e27ae5df9342ddcfd3ee01a8d"
+    },
+    "AntigravityExporter.psm1": {
+      "bytes": 12006,
+      "sha256": "581fc0c389f0eff7b7fe806bee79af5e920f3f882ea1ddb010c1651b8a53fe4f"
+    },
+    "CHANGELOG.md": {
+      "bytes": 1525,
+      "sha256": "3b4a973175db861aedd2162eaa3e547ead96ab36d7d6338d0dcfaa651aea904c"
+    },
+    "CONTRIBUTING.md": {
+      "bytes": 1265,
+      "sha256": "a5d43395899915fc7ec023196c32212ac820cb9762bbd6e3d4ecddf0eff8c49a"
+    },
+    "Export-Conversation.ps1": {
+      "bytes": 415,
+      "sha256": "39ca6fe85b560ed010582e2a1e126e0e2f04f6464b408e24d400e00f15bbaa01"
+    },
+    "Install-AntigravityExporter.ps1": {
+      "bytes": 2555,
+      "sha256": "27fa5c669333c7c0cd5924462b18782a6b79c8260401c90381f70332c005d17f"
+    },
+    "LICENSE": {
+      "bytes": 1097,
+      "sha256": "1a0192f27d262c7fd753e825c318318661cc934593b94a7a5ee5c15b5205d002"
+    },
+    "MANIFEST.in": {
+      "bytes": 429,
+      "sha256": "9ebeefc260b72fa78b8a8cd681d74784c79633772ca7f3a32fac1474b0f66f10"
+    },
+    "New-AntigravityRelease.ps1": {
+      "bytes": 3766,
+      "sha256": "0dd895d151ee91c6fd3b9ffe08683246edaec7fbbfa5c13faaf0b5617a00c684"
+    },
+    "Publish-AntigravityRepository.ps1": {
+      "bytes": 5090,
+      "sha256": "47150165ab71f5f6da2cb757de730260d80f794eefa1feabecf704df775b899c"
+    },
+    "README.md": {
+      "bytes": 9393,
+      "sha256": "9e41c0522c83d8c17490c20b554b8ec391474fd0b6453897bae7cfc878dd0a41"
+    },
+    "SECURITY.md": {
+      "bytes": 1663,
+      "sha256": "e44010e0894e14673e82af2433a90e2ef34548c18069b555b3a5134634d532bc"
+    },
+    "THIRD_PARTY_NOTICES.md": {
+      "bytes": 1371,
+      "sha256": "c4c8462c70c841a8a93421430c733f2fdee80bac8fc34df38d5c171b061cc4ff"
+    },
+    "Test-AntigravityExporter.ps1": {
+      "bytes": 1373,
+      "sha256": "f797a3f585b2bba2ef3e646655bf82e9bed5d522442b1f5a5184c04262ad96e9"
+    },
+    "agy_export.py": {
+      "bytes": 190,
+      "sha256": "61c64854c3b2314975532bc3638b3f4cbbf925be625f6ce42068aa97554d3749"
+    },
+    "antigravity_exporter/__init__.py": {
+      "bytes": 82,
+      "sha256": "ace7054901b8606a3eca3eb49be13dab7550296bc27ca815a7ba67cfd06f31ac"
+    },
+    "antigravity_exporter/__main__.py": {
+      "bytes": 47,
+      "sha256": "79ee6f134c5c5193377cf9b189cbdcc3e2095e49ba9cec310114441c15a917c4"
+    },
+    "antigravity_exporter/archive.py": {
+      "bytes": 12061,
+      "sha256": "da61893a538c881d7b3f20773464f3c264e9d5bea89b06df76863172e67b37f5"
+    },
+    "antigravity_exporter/cli.py": {
+      "bytes": 39809,
+      "sha256": "65a2cfaca5f7ebcee3364853a42de12c8d51f84822da516317bcb5a2016819e3"
+    },
+    "antigravity_exporter/model.py": {
+      "bytes": 25106,
+      "sha256": "b65e51c4ac0306a12cc1d614c1e92e886ae176c8a5c4c468178d0865876f5993"
+    },
+    "antigravity_exporter/naming.py": {
+      "bytes": 2983,
+      "sha256": "c61d74f23a7f59d44942bb207980d9658199e30b0f7c185dc129f100dd929c48"
+    },
+    "antigravity_exporter/progress.py": {
+      "bytes": 12921,
+      "sha256": "c84b946bea997089dff1d1089b0f237856c25aca11eaf9d395cd505975eac4c4"
+    },
+    "antigravity_exporter/render.py": {
+      "bytes": 16621,
+      "sha256": "ae25bee73c4f4845053dac5f3ebce9a7d2c44fd322fcf873aba5e0b3933daa3c"
+    },
+    "antigravity_exporter/storage.py": {
+      "bytes": 15860,
+      "sha256": "1aa911f2a0f1747619c0cb095accb0ce156daebfed5768abfd654c9fcff61b27"
+    },
+    "docs/PARITY.md": {
+      "bytes": 2561,
+      "sha256": "9237ab754dafe86c14f5aae6186035c7f79959dab40d8feed6c8b4dd0f674588"
+    },
+    "docs/PUBLISHING.md": {
+      "bytes": 4093,
+      "sha256": "5102d7cb74c55c52b389b45f207523792af3b1317176cfe4e02e4885586e272f"
+    },
+    "docs/VALIDATION.md": {
+      "bytes": 4296,
+      "sha256": "9eb885daef84d9db09e00d7a8d8db074c9579ca06e3cf8b222036a3ea4dfff18"
+    },
+    "pyproject.toml": {
+      "bytes": 807,
+      "sha256": "0f44f1dc9b1d68f860bebd17ee36f34c486f57b548cf6eb6cb259ed1cd31d575"
+    },
+    "tests/test_exporter.py": {
+      "bytes": 33096,
+      "sha256": "b6ea7f3541389f781f91b1049a4686cc2354f76f3b032a60a24e3fef9b85a155"
+    },
+    "tests/test_public_release.py": {
+      "bytes": 4948,
+      "sha256": "c932f838c350d358ca991ab352d5418a599fa355f2ff49ce4ed2b2805064ecd5"
+    },
+    "tests/test_rc2.py": {
+      "bytes": 7240,
+      "sha256": "23a89bde584ccc984990f370cc4db3b640d005964d68a3d44b1c270860c02b73"
+    },
+    "tools/public_release.py": {
+      "bytes": 6506,
+      "sha256": "4e44b7c12e1dc6eafcd9882353744d9602fd9fd3d3a586180ec0f28b2c8a3fa3"
+    },
+    "tools/smoke_external.py": {
+      "bytes": 1133,
+      "sha256": "3d0d3462680a737f23aeb36e011c14783f839a397b71f4b875ef1e8deeab92db"
+    }
+  },
+  "schema": "public-source-allowlist/1"
+}

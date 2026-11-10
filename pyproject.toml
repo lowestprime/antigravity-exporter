@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antigravity-thread-exporter"
+version = "0.3.0rc2"
+description = "Read-only Antigravity thread export with source provenance and verified archives"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "lowestprime"}]
+dependencies = []
+
+[project.optional-dependencies]
+exact = ["tiktoken>=0.12,<1"]
+
+[project.scripts]
+antigravity-export = "antigravity_exporter.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["antigravity_exporter*"]
+
+[project.urls]
+Repository = "https://github.com/lowestprime/antigravity-exporter"
+Issues = "https://github.com/lowestprime/antigravity-exporter/issues"
+
+[tool.setuptools]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
