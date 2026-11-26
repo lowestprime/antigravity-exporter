@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0 — source identity repair and Codex 0.5.2 archive parity
+
+- Resolve recorded catalog app_data_dir pointers before merging identities; add
+  the validated hub summary map adapter, qualified selectors and metadata provenance.
+- Restore project/agent/parent/title metadata, numeric chunk handling and early
+  missing-source diagnostics. Do not invent opaque historical conversation text.
+- Share the attributed pinned Codex 0.5.2 bounded archive/progress engine: measured
+  range ETA, retries, shared batch sets, complete reconstruction, source checks,
+  final 512000000-byte ZIP cap and verified fresh-file publication.
+- Match selected native JSONL to turn/since/message/range views with original byte
+  ranges and NUL-gap provenance. Add compressed direct JSONL input.
+- Add since/typed helpers, sort/paging/browser controls, timestamp preferences,
+  frontmatter/map controls, recorded edit cards, unknown sidecars and scoped ACL repair.
+- Install verified versioned PowerShell modules with static exports and automatic
+  discovery; preserve profiles, settings, prior versions and interpreter choices.
+- Require observed error-row evidence for quota-interruption labels; retain all
+  other database diagnostics and warn about real readable-history coverage gaps.
+- Keep selected-view database diagnostic text within the selected span; redact
+  credential-bearing titles in filenames, handoff indexes and grouped metadata.
+- Verify selected native bytes against the indexed record hashes before packaging;
+  correctly preflight chunks-only sessions and preserve whole-session coverage counts.
+- Add public snapshot inventories, synthetic regression coverage, real codec and
+  PowerShell installation gates, detailed parity/usage/installation documentation.
+
+
 ## 0.3.0rc3 — repository and release maintenance
 
 - Repair PUBLIC_FILES.json after the reviewed checkout/setup-python updates were

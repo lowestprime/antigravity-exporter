@@ -1,9 +1,10 @@
 include README.md LICENSE THIRD_PARTY_NOTICES.md SECURITY.md CONTRIBUTING.md CHANGELOG.md PUBLIC_FILES.json
-include *.ps1 *.psm1 agy_export.py
-recursive-include antigravity_exporter *.py
+include *.ps1 *.psm1 *.psd1 agy_export.py
+recursive-include antigravity_exporter *.py *.json
 recursive-include tests *.py
 recursive-include tools *.py
-recursive-include docs *.md
+recursive-include docs *.md *.json
+recursive-include bash *.sh
 recursive-include .github *.yml *.yaml *.md
 global-exclude *.py[cod] *.db *.jsonl *.log *.zip
 include .github/CODEOWNERS

@@ -19,22 +19,20 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python tools/public_release.py --tracked
+      - name: Install pinned official 7-Zip for real codec tests
+        run: python tools/ci_7zip.py
+      - name: Install optional decoding and timezone test dependencies
+        run: python -m pip install "zstandard>=0.23,<1" "tzdata>=2025.2"
       - run: python -m unittest discover -s tests -v
+      - name: Exercise real ZIP/LZMA export backend
+        shell: pwsh
+        run: |
+          python tools/smoke_external.py --archiver "$env:AGY_EXPORT_TEST_7Z"
+          if ($LASTEXITCODE -ne 0) { throw 'Real LZMA integration failed.' }
       - name: Parse/import PowerShell and run regressions using selected interpreter
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./Test-AntigravityExporter.ps1 -PythonPath (Get-Command python).Source
-      - name: Exercise real Windows ZIP/LZMA backend
-        if: runner.os == 'Windows' && matrix.python == '3.13'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $archiver = 'C:\Program Files\7-Zip\7z.exe'
-          if (-not (Test-Path -LiteralPath $archiver)) {
-            $archiver = (Get-Command 7z -CommandType Application -ErrorAction Stop).Source
-          }
-          python tools/smoke_external.py --archiver $archiver
-          if ($LASTEXITCODE -ne 0) { throw 'Real Windows LZMA integration failed.' }
   package:
     runs-on: ubuntu-latest
     steps:

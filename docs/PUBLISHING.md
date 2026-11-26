@@ -1,11 +1,15 @@
 # Initialize and maintain the public repository
 
-The requested remote is `lowestprime/antigravity-exporter`. Repository creation
-requires the owner's authenticated GitHub CLI. The bootstrap deliberately creates
-a fresh local folder from PUBLIC_FILES.json, not from an arbitrary Downloads or
-exports directory. It refuses an existing destination and never force-pushes.
+The maintained remote is `lowestprime/antigravity-exporter`. For this existing
+repository, use the maintenance and release process below. The bootstrap section
+applies only when initializing a genuinely new repository; it does not update or
+replace the existing remote.
 
-## First publication
+## Bootstrap of a new repository
+
+Repository creation requires the owner's authenticated GitHub CLI. The bootstrap
+creates a fresh local folder from PUBLIC_FILES.json. It refuses an existing
+destination and never force-pushes.
 
 From the reviewed portable source directory, after local tests:
 
@@ -28,13 +32,39 @@ unfamiliar existing repository.
 
 ## Automatic releases from reviewed version bumps
 
-Bump both `antigravity_exporter/__init__.py` and `pyproject.toml`, add a
-version-specific CHANGELOG.md section, review/refresh PUBLIC_FILES.json, and merge
-only after CI passes. A push to main changing a version file runs release.yml.
-Publication has `needs: validate`: it waits for six OS/Python jobs, Windows
-PowerShell/real-LZMA checks and distribution validation. It creates an annotated
-tag for that exact commit, uploads four checked assets to a draft, verifies their
-reported digests/sizes, and publishes. RC versions remain prereleases.
+Keep all three release declarations aligned:
+
+- `antigravity_exporter/__init__.py`: `__version__`.
+- `pyproject.toml`: project `version`.
+- `AntigravityExporter.psd1`: `ModuleVersion` and, for a release candidate,
+  `PrivateData.PSData.Prerelease`.
+
+For v0.4.0, all three version values are `0.4.0`, with no prerelease suffix.
+PowerShell requires a numeric `ModuleVersion`; a future Python version such as
+`0.4.1rc1` corresponds to `ModuleVersion = '0.4.1'` and
+`Prerelease = 'rc1'` inside `PrivateData.PSData`. Do not put `rc1` in ModuleVersion
+itself. The publication guard checks the normalized Python/PowerShell versions
+and rejects a disagreement. Keep the module GUID unchanged across upgrades.
+See Microsoft's [module manifest documentation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_module_manifests)
+and [prerelease metadata documentation](https://learn.microsoft.com/en-us/powershell/gallery/concepts/module-prerelease-support).
+
+Add a version-specific CHANGELOG.md section, review/refresh PUBLIC_FILES.json,
+and merge only after CI passes. A push to main changing either Python version
+file runs release.yml; changing only the PowerShell manifest does not trigger a
+new release. Publication has `needs: validate`: it waits for Python 3.10 and 3.13
+on Linux, macOS and Windows, real ZIP/LZMA checks in all six jobs, Windows
+PowerShell validation, and distribution validation. It creates an annotated tag
+for that exact commit, uploads four checked assets to a draft, verifies their
+reported digests/sizes, and publishes. RC versions remain prereleases; a stable
+version such as v0.4.0 is published as the latest release only after those gates.
+
+The four v0.4.0 assets are `antigravity-exporter-0.4.0.zip`,
+`antigravity_thread_exporter-0.4.0-py3-none-any.whl`,
+`antigravity_thread_exporter-0.4.0.tar.gz`, and `SHA256SUMS.txt`. The portable ZIP
+includes the PowerShell module, manifest, installer, tests and documentation. A
+Python wheel installation alone does not install the PowerShell module into a
+module discovery directory. See [POWERSHELL_INSTALL.md](POWERSHELL_INSTALL.md)
+for the persistent per-user installation.
 
 The same job creates the tag and publishes; it does not rely on a tag pushed with
 GITHUB_TOKEN triggering another workflow. Existing published assets and tags are
@@ -67,11 +97,13 @@ git push -u origin HEAD
 gh pr create --base main
 ```
 
-Review the staged content before committing. Merge only after CI passes. Bump
-both package version declarations, update CHANGELOG.md, refresh the public
-allowlist, commit on a PR branch and merge after CI; the reviewed version-file change
-starts automatic release validation. Never force-push
-published tags or upload private archives as debugging fixtures.
+Review the staged content before committing. Merge only after CI passes. For a
+release, align all three version declarations, update CHANGELOG.md, refresh the
+public allowlist, commit on a PR branch and merge after CI; the reviewed Python
+version-file change starts automatic release validation. Do not put private
+source catalogs, conversation archives, database snapshots, benchmark receipts or
+local export paths into public tests, documentation, release assets or Git
+history. Keep public fixtures synthetic. Never force-push published tags.
 
 After repository creation, the owner should enable a main-branch ruleset requiring
 pull requests and the actual discovered CI checks, block force pushes/deletions,
@@ -80,15 +112,17 @@ where offered. These server settings require appropriate administrative authorit
 and are **not** silently enabled by these scripts. Dependabot configuration is
 included, but any proposed update needs review and a refreshed allowlist.
 
-## Git bundle supplied with the preparation kit
+## Historical optional preparation bundle
 
-The separate optional bundle contains sanitized development history authored by
+The earlier optional bundle is separate from the four current release assets.
+That preparation bundle contains sanitized development history authored by
 `Antigravity Exporter automation`, not an impersonated maintainer. It has never
 contained the private transcripts. Verify with `git bundle verify FILE` and clone
 to a fresh folder to inspect it. The default bootstrap instead creates a fresh
 initial commit using your configured local Git identity.
 
 Official command references:
+
 - https://cli.github.com/manual/gh_repo_create
 - https://cli.github.com/manual/gh_run_watch
 - https://cli.github.com/manual/gh_release_create

@@ -42,13 +42,22 @@ def api(endpoint: str, payload: dict | None = None, *, missing_ok: bool = False)
 
 
 def package_version(root: Path) -> str:
+    """Require the Python package and PowerShell manifest to name one release."""
     module = (root / 'antigravity_exporter/__init__.py').read_text(encoding='utf-8')
     project = (root / 'pyproject.toml').read_text(encoding='utf-8')
-    a = re.search(r'^__version__\s*=\s*"([^"]+)"', module, re.M)
-    b = re.search(r'^version\s*=\s*"([^"]+)"', project, re.M)
-    if not a or not b or a[1] != b[1] or not VERSION_RE.fullmatch(a[1]):
-        raise ValueError('Package version declarations disagree or are unsupported')
-    return a[1]
+    manifest = (root / 'AntigravityExporter.psd1').read_text(encoding='utf-8')
+    a = re.findall(r'^__version__\s*=\s*"([^\"]+)"', module, re.M)
+    b = re.findall(r'^version\s*=\s*"([^\"]+)"', project, re.M)
+    # PowerShell requires System.Version in ModuleVersion; rcN lives in
+    # PrivateData.PSData.Prerelease, while Python uses the equivalent A.B.CrcN.
+    c = re.findall(r"^[ \t]*ModuleVersion\s*=\s*['\"](\d+\.\d+\.\d+)['\"]", manifest, re.M | re.I)
+    prerelease = re.findall(r"^[ \t]*Prerelease\s*=\s*['\"]([^'\"]*)['\"]", manifest, re.M | re.I)
+    suffix = prerelease[0] if len(prerelease) == 1 else ''
+    if (len(a) != 1 or len(b) != 1 or len(c) != 1 or len(prerelease) > 1
+            or (suffix and not re.fullmatch(r'rc\d+', suffix))
+            or a[0] != b[0] or a[0] != c[0] + suffix or not VERSION_RE.fullmatch(a[0])):
+        raise ValueError('Python/PowerShell package version declarations disagree or are unsupported')
+    return a[0]
 
 
 def validate_context(event: str, ref: str, sha: str, version: str) -> str:
