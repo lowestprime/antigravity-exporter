@@ -40,7 +40,7 @@ class IntegrationTests(Base):
         import sqlite3
         from test_exporter import wire
         db=self.root/'antigravity'/'conversations'/(ID+'.db')
-        with sqlite3.connect(db) as connection:
+        with contextlib.closing(sqlite3.connect(db)) as connection, connection:
             connection.execute('UPDATE steps SET step_payload=? WHERE idx=4',
                                (wire(1,b'EARLIER_PRIVATE_DIAGNOSTIC fixture marker'),))
         data=self.members(self.export('--since-turn','2','--tokenizer','none'))

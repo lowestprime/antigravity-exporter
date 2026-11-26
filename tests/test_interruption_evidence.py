@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import sys
@@ -28,7 +29,7 @@ class InterruptionEvidenceTests(unittest.TestCase):
             root = Path(directory)
             db = root / 'antigravity' / 'conversations' / (ID + '.db')
             db.parent.mkdir(parents=True)
-            with sqlite3.connect(db) as con:
+            with closing(sqlite3.connect(db)) as con, con:
                 con.execute('CREATE TABLE trajectory_meta (cascade_id TEXT)')
                 con.execute('INSERT INTO trajectory_meta VALUES (?)', (ID,))
                 con.execute('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, step_payload BLOB)')

@@ -102,14 +102,29 @@ def _timestamp(raw):
 
 
 def modified_key(value):
-    """Normalize SQLite spaces, UTC offsets and protobuf nanoseconds for ordering."""
+    """Order SQLite and hub times consistently on Python 3.10 and newer.
+
+    Python 3.10 rejects fractional widths other than three or six digits.
+    Normalize the parser input to six digits and retain the sub-microsecond
+    suffix separately. Removing trailing zeroes makes equal instants compare
+    equally without losing recorded nanosecond ordering.
+    """
+    minimum = (datetime.min.replace(tzinfo=timezone.utc), '')
     if not value:
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return minimum
+    text = str(value).strip()
+    submicrosecond = ''
+    fraction = re.fullmatch(r'(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})[.,](\d+)(Z|[+-]\d{2}:\d{2})?', text)
+    if fraction:
+        digits = fraction.group(2)
+        submicrosecond = digits[6:].rstrip('0')
+        text = fraction.group(1) + '.' + digits[:6].ljust(6, '0') + (fraction.group(3) or '')
     try:
-        parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
+        utc = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+        return utc, submicrosecond
     except (ValueError, OverflowError):
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return minimum
 
 
 def read_hub_catalog(src: Source, variant: str):

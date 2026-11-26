@@ -180,7 +180,7 @@ class UnifiedProgressTests(unittest.TestCase):
 class AccessScopeTests(unittest.TestCase):
     def test_repair_plan_rejects_unrelated_or_app_owned_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp); arbitrary=root/'unrelated.zip'; arbitrary.write_bytes(b'x')
+            root=Path(tmp).resolve(); arbitrary=root/'unrelated.zip'; arbitrary.write_bytes(b'x')
             protected=root/'.gemini'; protected.mkdir(); source=protected/'antigravity_test.zip'; source.write_bytes(b'x')
             for path in (arbitrary,source):
                 with self.assertRaises(ValueError): _repair_plan([path])
@@ -188,10 +188,27 @@ class AccessScopeTests(unittest.TestCase):
 
     def test_repair_plan_recognizes_only_shallow_standalone_review_tree(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)/'antigravity_example.review.files'; directory=root/'review';directory.mkdir(parents=True)
+            root=Path(tmp).resolve()/'antigravity_example.review.files'; directory=root/'review';directory.mkdir(parents=True)
             for name in ('INDEX.json','READ_FIRST.txt','PART_000001.txt'): (directory/name).write_text('synthetic')
             self.assertEqual(len(_repair_plan([root])),5)
             (root/'native').mkdir()
             with self.assertRaises(ValueError): _repair_plan([root])
+
+    def test_repair_plan_rejects_linked_files_and_parent_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # Canonicalize the test's legitimate parent, not paths under test.
+            root=Path(tmp).resolve(); directory=root/'actual'; directory.mkdir()
+            owned=directory/'antigravity_test.zip'; owned.write_bytes(b'synthetic')
+            linked_directory=root/'linked'; linked_file=root/'antigravity_link.zip'
+            try:
+                linked_directory.symlink_to(directory,target_is_directory=True)
+                linked_file.symlink_to(owned)
+            except (OSError,NotImplementedError) as exc:
+                self.skipTest(f'Symlink creation is unavailable: {exc}')
+            self.assertEqual(_repair_plan([owned]),[owned])
+            for path in (linked_file,linked_directory/owned.name):
+                with self.subTest(path=path.name):
+                    with self.assertRaisesRegex(ValueError,'refuses links and reparse points'):
+                        _repair_plan([path])
 
 if __name__=='__main__': unittest.main()

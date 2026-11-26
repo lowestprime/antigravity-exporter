@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,7 @@ import zipfile
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from antigravity_exporter.catalog import HUB_SCHEMA, has_full_transcript, has_transcript, read_hub_catalog
+from antigravity_exporter.catalog import HUB_SCHEMA, has_full_transcript, has_transcript, modified_key, read_hub_catalog
 from antigravity_exporter.model import capture_transcript, resolve, sessions
 from antigravity_exporter.storage import ExportError, Source
 
@@ -74,7 +75,7 @@ class SourceResolutionTests(unittest.TestCase):
     def summary(self, variant='antigravity-cli', *, ident=SESSION, storage='antigravity', stamp='2026-11-25T00:00:00Z', project=PROJECT):
         path = self.root / variant / 'conversation_summaries.db'
         path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(path) as con:
+        with closing(sqlite3.connect(path)) as con, con:
             con.execute('CREATE TABLE IF NOT EXISTS conversation_summaries '
                         '(conversation_id TEXT, title TEXT, project_id TEXT, last_modified_time TEXT, app_data_dir TEXT)')
             con.execute('INSERT INTO conversation_summaries VALUES (?,?,?,?,?)',
@@ -151,6 +152,19 @@ class SourceResolutionTests(unittest.TestCase):
         self.assertEqual(child['root_conversation_id'], SESSION)
         self.assertEqual(child['summary_step_count'], 3)
         self.assertEqual(child['modified'], '2026-11-26T18:40:05.3421054Z')
+
+    def test_catalog_timestamps_normalize_fraction_widths_and_timezones(self):
+        reference = modified_key('2026-11-26T18:40:05.3421054Z')
+        self.assertEqual(reference, modified_key('2026-11-26 18:40:05.342105400+00:00'))
+        self.assertEqual(reference, modified_key('2026-11-26T10:40:05.342105400-08:00'))
+        self.assertGreater(reference, modified_key('2026-11-25T23:59:59Z'))
+        self.assertGreater(reference, modified_key('invalid timestamp'))
+        self.assertEqual(modified_key('2026-11-26T18:40:05.1Z'),
+                         modified_key('2026-11-26T18:40:05.100000000Z'))
+        self.assertLess(modified_key('2026-11-26T18:40:05.100000001Z'),
+                        modified_key('2026-11-26T18:40:05.100000002Z'))
+        self.assertGreater(modified_key('2026-11-26T18:40:05.100000001Z'),
+                           modified_key('2026-11-26T18:40:05.100000000Z'))
 
     def test_newer_hub_metadata_wins_and_conflicts_remain_auditable(self):
         self.log(); self.summary(); path = self.hub()

@@ -169,8 +169,8 @@
       "sha256": "86e0fc89cd6358ee51d1d1427e11128083207c8432cbac51bb2ba42281879206"
     },
     "antigravity_exporter/catalog.py": {
-      "bytes": 16993,
-      "sha256": "b8279b2e92b94ed8f7c14024e036d8d4ecdc3dbd4ece1dbdca5b145a7fb63134"
+      "bytes": 17651,
+      "sha256": "01ccdc4a5646e65571acb3b9684b34b8c973bf39027be2e2d6cd7cd901c0e376"
     },
     "antigravity_exporter/cli.py": {
       "bytes": 65159,
@@ -257,12 +257,12 @@
       "sha256": "d5965262dccf7a025384acaffea83b34cad2628b28cb424d8f5356b2c3275728"
     },
     "tests/test_archive_sets.py": {
-      "bytes": 14098,
-      "sha256": "c6ba2c488a58c094e604c4006ae670ce87713540face8f02a89f26700d9edaf9"
+      "bytes": 15166,
+      "sha256": "4c60b95547722dc5062fdb5e0e3262b3d9f24e844a747705ceeee7250b13a3de"
     },
     "tests/test_bash_helpers.py": {
-      "bytes": 2011,
-      "sha256": "857488cf24242160103db597127fbc4f7b097c018dcb4565a5b1a103098073ec"
+      "bytes": 5233,
+      "sha256": "89d2544e4b5709150e205901751495d73bb4caafa929190e59adc04372f0ec48"
     },
     "tests/test_direct_inputs.py": {
       "bytes": 8109,
@@ -273,8 +273,8 @@
       "sha256": "15a25324e505319adc67becbeb83e4123e61c4f59aad292dfcf9e8f3bdab0ab8"
     },
     "tests/test_interruption_evidence.py": {
-      "bytes": 4991,
-      "sha256": "85bd9ae6d5462689eb8217f44b5903de664e74f165fb14a3c360bdb0b625829e"
+      "bytes": 5036,
+      "sha256": "d5c04b1dbfccb58b6eca6fdda57bdf5880ada379c64666f02aa81e5940303de4"
     },
     "tests/test_public_release.py": {
       "bytes": 4948,
@@ -301,12 +301,12 @@
       "sha256": "cf8c30beba581663082a526fc77122c64f0f5f0e61ab815869cb2b3dce3b4bfc"
     },
     "tests/test_source_resolution.py": {
-      "bytes": 14020,
-      "sha256": "302138913dcfc054e112560f02a17521c372afac9083313579427975e0796c45"
+      "bytes": 14983,
+      "sha256": "1dcb93d6a2cdc3c79a8fa73a5e3bbb758f2745eaca087c0869af08a7533d1793"
     },
     "tests/test_v040_integration.py": {
-      "bytes": 10740,
-      "sha256": "ebc65a6b309f54be51767b581a92deaad79229f3139738583bb0fabc226afcc1"
+      "bytes": 10772,
+      "sha256": "6c26f98c122793a4ced95cd25405aa2b5c9874ba0fdb25b98489a5de00e6d189"
     },
     "tools/audit_reference.py": {
       "bytes": 3597,
