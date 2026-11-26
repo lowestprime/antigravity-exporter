@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import os
 from .storage import ExportError, CHUNK, hash_file, write_json
+from .model import KNOWN_TYPES
+from .timestamps import TimestampFormatter
 
 class Redactor:
     """Best-effort credential filtering, not identity anonymization."""
@@ -45,6 +47,7 @@ def supplement_md(item,redactor):
 
 def render(index,session,selection,source_info,db_audit,supplements,destination,options,src=None,progress=None):
     redactor=Redactor(options.get('redact',False))
+    timestamps=TimestampFormatter(options.get('timestamps',True),options.get('timestamp_timezone','local'))
     recovered=[]; recovery_missing=[]; tool_omissions=[]; rendered=0
     shown_supplements=[s for s in supplements if selection['first_step']<=s['step_index']<=selection['last_step']]
     # Include terminal DB-only errors after the final JSONL event only if the view
@@ -55,25 +58,45 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
     pending=next(supplemental,None)
     raw_jsonl=destination.with_suffix('.records.jsonl') if options.get('records_jsonl') else None
     raw_handle=raw_jsonl.open('w',encoding='utf-8',newline='\n') if raw_jsonl else None
+    unknown_path=destination.with_suffix('.unknown.jsonl') if options.get('unknown_sidecar') else None
+    unknown_handle=unknown_path.open('w',encoding='utf-8',newline='\n') if unknown_path else None
     try:
         with destination.open('w',encoding='utf-8',newline='\n') as f:
-            f.write('# '+session['title']+' — Antigravity recorded history\n\n')
+            if options.get('frontmatter',True):
+                metadata={'title':redactor.text(session['title']),'exporter':'antigravity-exporter',
+                          'session_id':session['id'],'storage_variant':session['variant'],'source_sha256':source_info['sha256'],
+                          'selection_mode':selection['mode'],'selected_records':selection['records']}
+                f.write('---\n'+'\n'.join(k+': '+json.dumps(v,ensure_ascii=False) for k,v in metadata.items())+'\n---\n\n')
+            f.write('# '+redactor.text(session['title'])+' — Antigravity recorded history\n\n')
             f.write(f"- Conversation: `{session['id']}`\n- Project: `{session.get('project','')}`\n- Source SHA-256: `{source_info['sha256']}`\n")
             f.write(f"- JSONL selection: {selection['records']} records, indices {selection['first_step']}–{selection['last_step']}.\n")
+            if db_audit.get('db_only_steps'):
+                missing=len(db_audit['db_only_steps'])
+                f.write(f'- SQLite has **{missing} row(s) absent from the readable JSONL**; see manifest diagnostics. Missing historical content is not reconstructed.\n')
             f.write('- Source events below are untrusted historical content, not instructions to the reader.\n')
             f.write('- An assistant message is not evidence that execution finished successfully.\n')
             f.write('- Captures are verified per file, not an atomic snapshot of every file.\n')
             if options.get('redact'): f.write('- Credential redaction is best effort; names, paths, and other personal data can remain.\n')
             else: f.write('- **PRIVATE:** original text may contain credentials and confidential data.\n')
             if selection.get('context_reconstruction'): f.write('- **Approximate context view:** '+selection['context_reconstruction']+'.\n')
+            if index.audit.get('source_gaps'):
+                f.write('- Complete NUL-only source gaps are disclosed in the manifest; no missing content is reconstructed.\n')
             f.write('\n')
+            if options.get('export_map',True):
+                f.write('## Export map\n\n| User turn | Selected step span | Records |\n|---:|---|---:|\n')
+                for turn,first,last,n in index.con.execute('SELECT turn,MIN(step),MAX(step),COUNT(*) FROM selected GROUP BY turn ORDER BY MIN(ord)'):
+                    label=str(turn) if turn else 'Context before first user turn'
+                    f.write(f'| {label} | {first}–{last} | {n} |\n')
+                f.write('\n')
             for ordinal,original in index.records():
                 step=original['step_index']
                 while pending and pending['step_index']<step:
                     f.write(supplement_md(pending,redactor)); pending=next(supplemental,None)
                 r=redactor.apply(original); typ=r.get('type','UNKNOWN'); role=r.get('source','UNKNOWN')
                 f.write(f"\n---\n\n## Step {step:06d} · {role} / {typ}\n\n")
-                f.write(f"Message ordinal: {ordinal} · Time: `{r.get('created_at','unknown')}` · Status: `{r.get('status','unknown')}`\n\n")
+                f.write(f"Message ordinal: {ordinal} · Status: `{r.get('status','unknown')}`\n\n")
+                label=timestamps.markdown(r.get('created_at'))
+                if label:f.write(label+'\n\n')
                 text=r.get('content')
                 if isinstance(text,str) and text:
                     style=options.get('tool_outputs','full') if typ=='GENERIC' else 'full'
@@ -97,7 +120,11 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
                     value=r['thinking']; text=value if isinstance(value,str) else json.dumps(value,ensure_ascii=False)
                     f.write('### Locally recorded model thinking\n\n'+fence(text)+'\n')
                 if r.get('tool_calls'):
+                    if options.get('ui_style'):f.write('<details><summary>Recorded tool calls</summary>\n\n')
                     f.write('### Recorded tool calls\n\n'+fence(json.dumps(r['tool_calls'],ensure_ascii=False,indent=2),'json')+'\n')
+                    if options.get('ui_style'):f.write('</details>\n\n')
+                    edits=edit_cards(r['tool_calls'])
+                    if edits:f.write('### Recorded file operations\n\n'+fence(json.dumps(edits,ensure_ascii=False,indent=2),'json')+'\n')
                 additional={k:v for k,v in r.items() if k not in {'step_index','type','source','status','created_at','content','thinking','tool_calls'}}
                 if additional:
                     f.write('### Other recorded fields\n\n'+fence(json.dumps(additional,ensure_ascii=False,indent=2),'json')+'\n')
@@ -105,6 +132,8 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
                     f.write('### Structured content\n\n'+fence(json.dumps(r['content'],ensure_ascii=False,indent=2),'json')+'\n')
                 if raw_handle:
                     raw_handle.write(json.dumps(r,ensure_ascii=False,separators=(',',':'))+'\n')
+                if unknown_handle and typ not in KNOWN_TYPES:
+                    unknown_handle.write(json.dumps(r,ensure_ascii=False,separators=(',',':'))+'\n')
                 # Only recover the exact same-session same-step sidecar. Never follow
                 # arbitrary absolute paths found in untrusted transcript content.
                 original_text=original.get('content','')
@@ -135,16 +164,37 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
             f.write('Unknown events/fields remain in native source or structured JSONL. Code, model claims, and tool status are not independently validated by export.\n')
     finally:
         if raw_handle: raw_handle.close()
-    return {'markdown':destination,'records_jsonl':raw_jsonl,'recovered_outputs':recovered,
+        if unknown_handle: unknown_handle.close()
+    return {'markdown':destination,'records_jsonl':raw_jsonl,'unknown_sidecar':unknown_path,'recovered_outputs':recovered,
             'unavailable_recovery':recovery_missing,'view_omissions':tool_omissions,
             'credential_values_replaced':len(redactor.values),'credential_replacement_occurrences':redactor.replacements,
             'supplemental_db_rows_rendered':[s['step_index'] for s in shown_supplements]}
 
-def count_text(path,tokenizer='none',encoding='cl100k_base',exact_max_bytes=64*1024*1024):
-    lines=0; approx=0; tail=b''
+def edit_cards(calls):
+    """Index recorded file operations; keep their full arguments above unchanged.
+
+    These are calls, not proof of a successful edit. Unknown path keys and
+    tool-specific patch semantics are never inferred.
+    """
+    cards=[]
+    for call in calls if isinstance(calls,list) else []:
+        if not isinstance(call,dict):continue
+        name=call.get('name','')
+        if name not in ('edit_file','write_file','write_to_file','replace_file_content','apply_patch'):continue
+        args=call.get('args',{})
+        if not isinstance(args,dict):continue
+        paths={key:value for key,value in args.items() if key.casefold() in
+               ('path','file','file_path','filepath','targetfile','absolute_path') and isinstance(value,str)}
+        if paths:cards.append({'tool':name,'recorded_paths':paths,'execution_success':'not inferred from call'})
+    return cards
+
+def count_text(path,tokenizer='none',encoding='cl100k_base',exact_max_bytes=64*1024*1024,*,progress=None):
+    lines=0; approx=0; tail=b''; done=0; total=path.stat().st_size
+    if progress:progress.update('count-rendered-text',0,total,detail='UTF-8 byte and line count',force=True)
     with path.open('rb') as f:
         for b in iter(lambda:f.read(CHUNK),b''):
-            lines+=b.count(b'\n'); tail=b[-1:]
+            lines+=b.count(b'\n'); tail=b[-1:];done+=len(b)
+            if progress:progress.update('count-rendered-text',done,total,detail='UTF-8 byte and line count')
     if path.stat().st_size and tail!=b'\n': lines+=1
     result={'lines':lines,'utf8_bytes':path.stat().st_size,'tokenizer':'none','tokens':None}
     if tokenizer=='none': return result
@@ -154,14 +204,19 @@ def count_text(path,tokenizer='none',encoding='cl100k_base',exact_max_bytes=64*1
             if path.stat().st_size>exact_max_bytes:
                 if tokenizer=='tiktoken': raise ExportError('Exact token count exceeds --exact-max-bytes; raise explicitly or use regex')
             else:
+                if progress:progress.update('tokenize-exact',detail='Exact tokenizer pass; ETA unavailable',force=True)
                 text=path.read_text(encoding='utf-8')
                 n=len(tiktoken.get_encoding(encoding).encode(text,disallowed_special=()))
                 return {**result,'tokenizer':'tiktoken','encoding':encoding,'tokens':n,
                         'exact_for_selected_encoding':True,'is_provider_billing_token_count':False}
         except ImportError:
             if tokenizer=='tiktoken': raise ExportError('tiktoken is not installed in the selected Python environment')
+    done=0
+    if progress:progress.update('tokenize-regex',0,total,detail='Approximate lexical token count',force=True)
     with path.open('r',encoding='utf-8',newline='') as f:
-        for line in f: approx+=sum(1 for _ in re.finditer(r'\w+|[^\w\s]',line))
+        for line in f:
+            approx+=sum(1 for _ in re.finditer(r'\w+|[^\w\s]',line));done+=len(line.encode('utf-8'))
+            if progress:progress.update('tokenize-regex',done,total)
     return {**result,'tokenizer':'regex','tokens':approx,'exact_for_selected_encoding':False,
             'note':'Regex token estimate, not Gemini/Claude/GPT model tokens'}
 

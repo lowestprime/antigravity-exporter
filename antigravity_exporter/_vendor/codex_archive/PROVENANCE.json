@@ -1,0 +1,40 @@
+{
+  "repository": "https://github.com/lowestprime/codex-exporter",
+  "commit": "acd322d1987f1078b6f79dcba62c898704dcc5ba",
+  "version": "0.5.2",
+  "license": "MIT",
+  "files": {
+    "progress.py": {
+      "upstream_sha256": "2df7255a34f077c8827b8bd86d525de82d334a6c9d781c913de3470f8b9fa759",
+      "adapted_sha256": "d520f35ec4ca8ac4cfc8e83e979f3758a7670a7959823de1fef182b37f0eb125"
+    },
+    "bounded_archive.py": {
+      "upstream_sha256": "be7a1901a11e363ab1d153cbdbe374ff51190bf0beffbb811abc97d3fa5fec2d",
+      "adapted_sha256": "b116cc7d130d4ccfde6de8ac0af16821e179d633256939ea695dae8f1d887cd5"
+    },
+    "archive_stream.py": {
+      "upstream_sha256": "05e9823df9394dc7da30bab87c74077c0c434a175c92ccbd5e3f0068aad46370",
+      "adapted_sha256": "8b586607e78d783fec8e3ac955dd943b78f9ebc547c7a0d5fd3006617277e136"
+    },
+    "compression_plan.py": {
+      "upstream_sha256": "d291c614ca83f957a4dcae0e1a903bfe449718a40cb480e32bc511a236eb344f",
+      "adapted_sha256": "d291c614ca83f957a4dcae0e1a903bfe449718a40cb480e32bc511a236eb344f"
+    },
+    "storage.py": {
+      "upstream_sha256": "a84f20e45bce5750ab8a33c5924750b8dc96c4d9ffc62067a4cebee23874888e",
+      "adapted_sha256": "a84f20e45bce5750ab8a33c5924750b8dc96c4d9ffc62067a4cebee23874888e"
+    },
+    "file_access.py": {
+      "upstream_sha256": "1d0534c41bfc4f36fca943b0ec4f90fa60b52f0f063dc691ec996eee024f3569",
+      "adapted_sha256": "011a29a0eab1840032a000c5ce5c34afed710b2d40161067c72e18c217bb2cd8"
+    },
+    "archive_diagnostics.py": {
+      "upstream_sha256": "39cfd1395535d2a12c32d380ea83a607bd7c5778da85d96d09d5812b143a8ce2",
+      "adapted_sha256": "39cfd1395535d2a12c32d380ea83a607bd7c5778da85d96d09d5812b143a8ce2"
+    },
+    "archive_pipeline.py": {
+      "upstream_sha256": "ca91db08343e6240cfe382f3e6eb76141415e02f4461ebe2407801c2acd3b1b5",
+      "adapted_sha256": "09a0541de9cbcb019c0ed3b055e23f7f1b497f8b968535780ea8531ef10c5385"
+    }
+  }
+}

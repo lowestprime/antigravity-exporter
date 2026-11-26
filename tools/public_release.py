@@ -5,13 +5,14 @@ import argparse,hashlib,json,re,subprocess,sys,tarfile,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 MANIFEST=ROOT/'PUBLIC_FILES.json'
-ALLOWED_ROOTS={'antigravity_exporter','tools','tests','docs','.github'}
-ALLOWED_EXTS={'.py','.ps1','.psm1','.md','.txt','.toml','.yaml','.yml','.in','.json'}
+ALLOWED_ROOTS={'antigravity_exporter','tools','tests','docs','.github','bash'}
+ALLOWED_EXTS={'.py','.ps1','.psm1','.psd1','.sh','.md','.txt','.toml','.yaml','.yml','.in','.json'}
 ROOT_FILES={'.gitignore','.gitattributes','LICENSE','THIRD_PARTY_NOTICES.md','README.md','SECURITY.md',
     'CONTRIBUTING.md','CHANGELOG.md','MANIFEST.in','pyproject.toml','agy_export.py',
-    'AntigravityExporter.psm1','Test-AntigravityExporter.ps1','Install-AntigravityExporter.ps1',
+    'AntigravityExporter.psm1','AntigravityExporter.psd1','Test-AntigravityShell.ps1','Test-AntigravityCli.ps1','Test-AntigravityExporter.ps1','Install-AntigravityExporter.ps1',
     'Publish-AntigravityRepository.ps1','New-AntigravityRelease.ps1','Export-Conversation.ps1'}
-SYNTHETIC_UUIDS={'11111111-2222-4333-8444-555555555555','aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'}
+PUBLIC_MODULE_GUID='475602fb-37d5-4378-9f99-38546237d7e4'
+SYNTHETIC_UUIDS={'11111111-2222-4333-8444-555555555555','aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee','22222222-2222-4333-8444-555555555555'}
 IGNORE_DIRS={'.git','__pycache__','.pytest_cache','.venv','dist','build'}
 
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -26,7 +27,7 @@ def validate(path):
     if re.search(r'data:'+r'image/[^;\s]+;base64,[A-Za-z0-9+/]{128,}',text):raise ValueError('Embedded image data in '+relative)
     if re.search(r'(?i)(?:C:[\\/]Users[\\/])(?!example[\\/])[^\\/\s]+',text):raise ValueError('Personal user path in '+relative)
     for value in re.findall(r'\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b',text):
-        if value not in SYNTHETIC_UUIDS:raise ValueError('Non-synthetic UUID requires review: '+relative)
+        if value not in SYNTHETIC_UUIDS and not (relative in ('AntigravityExporter.psd1','tools/public_release.py') and value==PUBLIC_MODULE_GUID):raise ValueError('Non-synthetic UUID requires review: '+relative)
     secret=re.compile(r'(?:g'+'h[pousr]_|github'+'_pat_)[A-Za-z0-9_]{30,}|s'+'k-[A-Za-z0-9_-]{30,}')
     if secret.search(text):raise ValueError('Potential credential in '+relative)
     return relative,{'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}

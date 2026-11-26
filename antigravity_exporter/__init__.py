@@ -1,2 +1,2 @@
 """Local, read-only Antigravity conversation exports."""
-__version__ = "0.3.0rc3"
+__version__ = "0.4.0"

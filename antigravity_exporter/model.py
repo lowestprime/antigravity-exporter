@@ -22,76 +22,39 @@ def annotation_title(data):
     except ValueError: return None
 
 def sessions(src: Source) -> list[dict]:
-    projects={}
-    for name in src.files('config/projects/'):
-        if not name.endswith('.json'): continue
-        doc=json.loads(src.read_small(name))
-        if isinstance(doc,dict): projects[doc.get('id',Path(name).stem)]=doc.get('name','')
-    all_sessions=[]
-    for variant in src.variants():
-        found={}
-        dbname=f'{variant}/conversation_summaries.db'
-        if src.exists(dbname):
-            snap,_=src.snapshot(dbname,database=True)
-            con=sqlite3.connect(snap.as_uri()+'?mode=ro',uri=True)
-            con.row_factory=sqlite3.Row
-            try:
-                tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                if 'conversation_summaries' in tables:
-                    columns={r[1] for r in con.execute('PRAGMA table_info(conversation_summaries)')}
-                    want=[x for x in ['conversation_id','title','project_id','step_count','last_modified_time',
-                                     'workspace_uris','status','parent_conversation_id','not_fully_idle'] if x in columns]
-                    if 'conversation_id' not in want: raise ExportError('Summary DB has no conversation_id column')
-                    for row in con.execute('SELECT '+','.join(want)+' FROM conversation_summaries'):
-                        r=dict(row); ident=r.pop('conversation_id')
-                        if UUID_RE.fullmatch(ident or ''): found[ident.lower()]=r
-            finally: con.close()
-        if src.z:
-            for name in src.entries:
-                m=re.match(re.escape(variant)+r'/(?:conversations/([a-fA-F0-9-]{36})\.(?:db|pb)$|brain/([a-fA-F0-9-]{36})/)',name)
-                if m:
-                    ident=m.group(1) or m.group(2)
-                    if UUID_RE.fullmatch(ident): found.setdefault(ident.lower(),{})
-        else:
-            for folder in ('brain','conversations'):
-                base=src.path(f'{variant}/{folder}')
-                if base.is_dir():
-                    for entry in base.iterdir():
-                        ident=entry.name if entry.is_dir() else entry.stem
-                        if UUID_RE.fullmatch(ident): found.setdefault(ident.lower(),{})
-        for ident,row in found.items():
-            prefix=f'{variant}/brain/{ident}/.system_generated/logs/'
-            title=annotation_title(src.read_small(f'{variant}/annotations/{ident}.pbtxt')) or row.get('title') or ident
-            project_id=row.get('project_id','')
-            project_name=projects.get(project_id,'')
-            full=src.exists(prefix+'transcript_full.jsonl')
-            reduced=src.exists(prefix+'transcript.jsonl')
-            chunked=(any(n.startswith(prefix+'chunks/transcript_full/') for n in src.entries) if src.z else
-                     src.path(prefix+'chunks/transcript_full').is_dir())
-            all_sessions.append({'id':ident,'title':title,'variant':variant,'project':project_name,
-                                 'project_id':project_id,'project_assignment':'summary.project_id' if project_id else 'unavailable',
-                                 'summary_step_count':row.get('step_count'),'modified':str(row.get('last_modified_time','')),
-                                 'workspace_uris':row.get('workspace_uris',''), 'catalog_status':row.get('status'),
-                                 'parent_conversation_id':row.get('parent_conversation_id',''),
-                                 'full':full,'reduced':reduced,'chunked_full':chunked,
-                                 'db':src.exists(f'{variant}/conversations/{ident}.db')})
-    return sorted(all_sessions,key=lambda s:(s['modified'],s['id']),reverse=True)
+    from .catalog import discover_sessions
+    return discover_sessions(src)
+
 
 def resolve(all_sessions, ids=None, project=None, variant=None, latest=False, all_=False):
-    pool=[s for s in all_sessions if (not variant or s['variant']==variant) and
-          (not project or s['project'].casefold()==project.casefold() or s['project_id']==project)]
+    pool = [s for s in all_sessions if (not variant or s['variant'] == variant) and
+            (not project or s['project'].casefold() == project.casefold() or s['project_id'] == project)]
     if ids:
-        selected=[]
-        for term in ids:
-            term=term.strip().lower()
-            if len(term)<8 or not re.fullmatch('[a-f0-9-]+',term):
-                raise ExportError('Use an exact UUID or unique hexadecimal UUID prefix of at least 8 characters')
-            matches=[s for s in pool if s['id'].startswith(term)]
-            if len(matches)!=1: raise ExportError(f'Session selector {term!r} matched {len(matches)} sessions; specify --variant or full ID')
-            if matches[0] not in selected: selected.append(matches[0])
+        selected = []
+        selected_keys = set()
+        for value in ids:
+            term = value.strip().lower()
+            qualifier = None
+            if ':' in term:
+                qualifier, term = term.split(':', 1)
+                if qualifier not in VARIANTS:
+                    raise ExportError(f'Unknown session storage variant: {qualifier!r}')
+            if len(term) < 8 or not re.fullmatch('[a-f0-9-]+', term):
+                raise ExportError('Use an exact UUID or unique hexadecimal UUID prefix of at least 8 characters; variant:UUID is also supported')
+            matches = [s for s in pool if s['id'].startswith(term) and
+                       (qualifier is None or s['variant'] == qualifier)]
+            if len(matches) != 1:
+                locations = ', '.join(s.get('selector', s['variant'] + ':' + s['id']) for s in matches)
+                detail = f'; candidates: {locations}' if locations else ''
+                raise ExportError(f'Session selector {value!r} matched {len(matches)} storage identities{detail}. Use --variant or variant:UUID for distinct sources.')
+            key = (matches[0]['variant'], matches[0]['id'])
+            if key not in selected_keys:
+                selected.append(matches[0]); selected_keys.add(key)
         return selected
-    if latest and pool: return [pool[0]]
-    if all_ or project: return pool
+    if latest and pool:
+        return [pool[0]]
+    if all_ or project:
+        return pool
     raise ExportError('Specify --id UUID, --project NAME, --latest-session, or --all')
 
 def capture_transcript(src: Source, session, *, allow_reduced=False, verify_chunks=False):
@@ -102,12 +65,11 @@ def capture_transcript(src: Source, session, *, allow_reduced=False, verify_chun
         path,info=src.snapshot(name,growth=True)
         info={**info,'fidelity':'full-recorded-log'}
     else:
-        chunks=[n for n in src.files(base+'chunks/transcript_full/') if n.endswith('.jsonl')]
+        from .catalog import ordered_chunks
+        chunks,_=ordered_chunks(src,base+'chunks/transcript_full/')
         if chunks:
-            numeric=[int(Path(n).stem) for n in chunks if Path(n).stem.isdigit()]
-            if len(numeric)!=len(chunks) or numeric!=list(range(len(chunks))):
-                raise ExportError('Full transcript chunk numbering has gaps or unexpected names')
-            path=src.stage/('reassembled-'+session['id']+'.jsonl')
+            import uuid
+            path=src.stage/('reassembled-'+session['variant']+'-'+session['id']+'-'+uuid.uuid4().hex+'.jsonl')
             constituent=[]
             with path.open('xb') as out:
                 for part in chunks:
@@ -125,8 +87,8 @@ def capture_transcript(src: Source, session, *, allow_reduced=False, verify_chun
         else:
             raise ExportError('No full transcript/chunks available. --allow-reduced is explicit loss acceptance; opaque protobuf is not guessed.')
     if verify_chunks and info['fidelity']=='full-recorded-log':
-        chunks=[n for n in src.files(base+'chunks/transcript_full/') if n.endswith('.jsonl')]
-        nums=[int(Path(n).stem) for n in chunks if Path(n).stem.isdigit()]
+        from .catalog import ordered_chunks
+        chunks,contiguous=ordered_chunks(src,base+'chunks/transcript_full/',validate=False)
         h=hashlib.sha256(); size=0
         with (src.progress.group('verify-transcript-chunks',total=len(chunks),unit='files') if src.progress else nullcontext()):
             for number,n in enumerate(chunks,1):
@@ -134,7 +96,7 @@ def capture_transcript(src: Source, session, *, allow_reduced=False, verify_chun
                 with p.open('rb') as f:
                     for b in iter(lambda:f.read(CHUNK),b''): h.update(b); size+=len(b)
                 if src.progress: src.progress.update('verify-transcript-chunks',number,len(chunks),unit='files',detail=n)
-        info['chunk_audit']={'files':len(chunks),'contiguous':nums==list(range(len(chunks))) and len(nums)==len(chunks),
+        info['chunk_audit']={'files':len(chunks),'contiguous':contiguous,
                              'bytes':size,'sha256':h.hexdigest(),
                              'equals_monolithic':bool(chunks) and size==info['bytes'] and h.hexdigest()==info['sha256']}
     return path,info
@@ -150,19 +112,25 @@ class EventIndex:
                              'thinking_chars INTEGER, tool_count INTEGER, assistant_text INTEGER, truncated INTEGER, sha256 TEXT)')
             self.counts=Counter(); self.unknown=Counter(); self.issues=[]; self.partial_tail=None
             self.turns=[]; current=None; turn=0; ordinal=0; laststep=-1; gap_ranges=[]
+            self.source_gaps=[]; source_size=source.stat().st_size
             with source.open('rb') as f:
                 while True:
                     offset=f.tell(); line=f.readline(max_record_bytes+1)
                     if not line: break
                     if len(line)>max_record_bytes: raise ExportError('Individual JSONL record exceeds --max-record-bytes')
                     if not line.strip(): continue
+                    body=line[:-2] if line.endswith(b'\r\n') else line[:-1]
+                    if line.endswith(b'\n') and body and body.count(b'\x00')==len(body):
+                        self.source_gaps.append({'offset':offset,'bytes':len(line),'sha256':hashlib.sha256(line).hexdigest(),
+                                                 'kind':'nul_only_record','content_reconstructed':False})
+                        continue
                     try:
                         record=json.loads(line)
                         if not isinstance(record,dict) or type(record.get('step_index')) is not int or record['step_index']<0:
                             raise ValueError('Expected object with nonnegative integer step_index')
                     except (ValueError,UnicodeError) as exc:
                         issue={'offset':offset,'bytes':len(line),'sha256':hashlib.sha256(line).hexdigest(),'error':str(exc)}
-                        if not line.endswith(b'\n') and f.tell()==source.stat().st_size:
+                        if not line.endswith(b'\n') and f.tell()==source_size:
                             self.partial_tail=issue; break
                         if not skip_invalid: raise ExportError(f'Completed malformed JSONL record at byte {offset}: {exc}') from exc
                         self.issues.append(issue); continue
@@ -196,7 +164,7 @@ class EventIndex:
                         current['records']+=1; current['tool_calls']+=tool_count; current['assistant_text_messages']+=assistant
                         current['last_event_is_assistant_text']=bool(assistant and not tool_count)
                     if ordinal%1000==0: self.con.commit()
-                    if progress: progress.update('index-records',f.tell(),source.stat().st_size,detail=f'{ordinal} records')
+                    if progress: progress.update('index-records',f.tell(),source_size,detail=f'{ordinal} records')
             self.con.commit()
             if not ordinal: raise ExportError('No valid transcript records')
             self.count=ordinal
@@ -206,7 +174,8 @@ class EventIndex:
                         'event_types':dict(self.counts),'unknown_types':dict(self.unknown),
                         'user_turns':turn,'tool_calls':self.con.execute('SELECT SUM(tool_count) FROM events').fetchone()[0],
                         'recorded_thinking_chars':self.con.execute('SELECT SUM(thinking_chars) FROM events').fetchone()[0],
-                        'native_copy_contains_entire_captured_prefix':True}
+                        'native_copy_contains_entire_captured_prefix':True,'source_gaps':self.source_gaps,
+                        'source_gap_policy':'Only complete newline-terminated NUL-only records; original bytes preserved, content not reconstructed'}
         except BaseException:
             self.con.close()
             raise
@@ -246,13 +215,72 @@ class EventIndex:
         n,low,high=self.con.execute('SELECT COUNT(*),MIN(step),MAX(step) FROM selected').fetchone()
         if not n: raise ExportError('Selection matched no records')
         return {'records':n,'first_step':low,'last_step':high,'mode':mode,
-                'native_jsonl_scope':'entire captured source, including records outside this rendered selection',
+                'native_jsonl_scope':'byte-exact selected source records and disclosed gaps within selected intervals',
+                'first_ordinal':self.con.execute('SELECT MIN(ord) FROM selected').fetchone()[0],
+                'last_ordinal':self.con.execute('SELECT MAX(ord) FROM selected').fetchone()[0],
                 'context_reconstruction':'checkpoint plus suffix only; not actual server context' if mode=='checkpoint-context' else None}
+    def selected_source(self, destination:Path, selection:dict, *, progress=None):
+        """Borrow a full capture or copy original selected ranges without JSON rewriting.
+
+        Contiguous event runs include intervening blank/NUL/skipped records; the
+        manifest discloses these bytes. Disjoint display filters do not bring back
+        unrelated events between runs. Complete exports retain the captured tail.
+        """
+        if selection['records']==self.count:
+            return self.source, {'included':True,'scope':'entire captured transcript',
+                'byte_exact_captured_prefix':True,'byte_exact_source_records':True,
+                'bytes':self.source.stat().st_size,'sha256':hash_file(self.source),
+                'ranges':[{'start':0,'end_exclusive':self.source.stat().st_size}],
+                'source_gaps':self.source_gaps,'partial_tail_retained':self.partial_tail}
+        ranges=[]; previous=None
+        for ordinal,offset,size in self.con.execute('SELECT ord,offset,size FROM selected ORDER BY ord'):
+            end=offset+size
+            if previous is not None and ordinal==previous+1:
+                ranges[-1]['end_exclusive']=end
+            else:ranges.append({'start':offset,'end_exclusive':end})
+            previous=ordinal
+        total=sum(r['end_exclusive']-r['start'] for r in ranges)
+        digest=hashlib.sha256(); done=0
+        with self.source.open('rb') as source,destination.open('xb') as output:
+            for item in ranges:
+                source.seek(item['start']);remaining=item['end_exclusive']-item['start']
+                while remaining:
+                    block=source.read(min(CHUNK,remaining))
+                    if not block:raise ExportError('Captured source truncated while extracting selected native bytes')
+                    output.write(block);digest.update(block);remaining-=len(block);done+=len(block)
+                    if progress:progress.update('select-native-records',done,total)
+        # Verify copied event bytes against the immutable index, not against a
+        # digest computed from the same possibly mutated source during copying.
+        # Map original offsets to their positions in the concatenated output.
+        range_number = 0; output_base = 0
+        with destination.open('rb') as copied:
+            for offset, size, expected in self.con.execute('SELECT offset,size,sha256 FROM selected ORDER BY ord'):
+                while offset >= ranges[range_number]['end_exclusive']:
+                    output_base += ranges[range_number]['end_exclusive'] - ranges[range_number]['start']
+                    range_number += 1
+                copied.seek(output_base + offset - ranges[range_number]['start'])
+                record_hash = hashlib.sha256(); remaining = size
+                while remaining:
+                    block = copied.read(min(CHUNK, remaining))
+                    if not block: raise ExportError('Selected native record was truncated during copying')
+                    record_hash.update(block); remaining -= len(block)
+                if record_hash.hexdigest() != expected:
+                    raise ExportError('Captured event changed after indexing while copying selected native bytes')
+        if hash_file(destination)!=digest.hexdigest():raise ExportError('Selected native source verification failed')
+        retained=[g for g in self.source_gaps if any(r['start']<=g['offset'] and g['offset']+g['bytes']<=r['end_exclusive'] for r in ranges)]
+        return destination, {'included':True,'scope':'selected original source ranges',
+            'byte_exact_captured_prefix':False,'byte_exact_source_records':True,
+            'bytes':done,'sha256':digest.hexdigest(),'ranges':ranges,'source_gaps':retained,
+            'excluded_records':self.count-selection['records'],'partial_tail_retained':None,
+            'embedded_history_policy':'Selected checkpoint or context content may quote prior history; retained without rewriting.'}
+
     def records(self, selected=True):
         table='selected' if selected else 'events'
         with self.source.open('rb') as f:
-            for ordinal,offset,size in self.con.execute(f'SELECT ord,offset,size FROM {table} ORDER BY ord'):
+            for ordinal,offset,size,expected in self.con.execute(f'SELECT ord,offset,size,sha256 FROM {table} ORDER BY ord'):
                 f.seek(offset); line=f.read(size)
+                if len(line)!=size or hashlib.sha256(line).hexdigest()!=expected:
+                    raise ExportError('Captured event changed after indexing; export stopped')
                 yield ordinal,json.loads(line)
     def listing(self, responses=False):
         where=' WHERE assistant_text=1' if responses else ''
@@ -342,6 +370,10 @@ def audit_database(src:Source, session, index:EventIndex):
             supplements.append({'step_index':step,'step_type':row['step_type'],'status_code':row['status'],
                                 'provenance':'SQLite-only row; NOT an original JSONL event',
                                 'quota_bytes_observed':quota,'http_429_bytes_observed':http429,
+                                'quota_error_step':row['step_type']==17 and (quota or http429),
+                                'evidence_class':('quota-error-step' if row['step_type']==17 and (quota or http429) else
+                                                  'error-step-without-quota-marker' if row['step_type']==17 else
+                                                  'text-mention-in-opaque-row' if quota or http429 else 'opaque-row'),
                                 'timestamp_strings_observed':sorted(set(times)),
                                 'text_leaves':leaves,'blob_hashes':{k:{'bytes':len(v),'sha256':hashlib.sha256(v).hexdigest()} for k,v in blobs.items()},
                                 'semantic_schema_decoded':False})
@@ -354,16 +386,29 @@ def audit_database(src:Source, session, index:EventIndex):
     finally: con.close()
 
 def interruption_summary(index, supplements):
-    quota=[x for x in supplements if x['quota_bytes_observed'] or x['http_429_bytes_observed']]
-    latest=max(quota,key=lambda x:x['step_index']) if quota else None
-    out={'completion':'not established; assistant text is not a completion signal',
-         'database_only_quota_steps':[x['step_index'] for x in quota],
-         'latest_database_only_quota_step':latest['step_index'] if latest else None,
-         'timestamp_strings_in_latest_quota_step':latest['timestamp_strings_observed'] if latest else [],
-         'timestamps_are_historical_observations_not_live_service_predictions':True}
-    for turn in index.turns:
-        next_turn=next((t['first_step'] for t in index.turns if t['turn']==turn['turn']+1),None)
-        in_turn=[q['step_index'] for q in quota if q['step_index']>=turn['first_step'] and (next_turn is None or q['step_index']<next_turn)]
-        turn['database_only_quota_steps']=in_turn
-        if in_turn: turn['execution_complete']='interrupted_by_recorded_quota_event'
+    # A quota phrase quoted in a tool result or earlier prompt is not a new
+    # interruption. Only the observed error-step type contributes to this index.
+    from bisect import bisect_left
+    quota = [row for row in supplements if row.get('step_type') == 17 and
+             (row.get('quota_bytes_observed') or row.get('http_429_bytes_observed'))]
+    quota.sort(key=lambda row: row['step_index'])
+    positions = [row['step_index'] for row in quota]
+    latest = quota[-1] if quota else None
+    out = {
+        'completion': 'not established; assistant text is not a completion signal',
+        'database_only_quota_steps': positions,
+        'latest_database_only_quota_step': latest['step_index'] if latest else None,
+        'timestamp_strings_in_latest_quota_step': latest['timestamp_strings_observed'] if latest else [],
+        'timestamps_are_historical_observations_not_live_service_predictions': True,
+        'quota_detection_policy': 'observed SQLite error step_type 17 plus quota or HTTP 429 byte evidence',
+        'non_error_quota_mentions_are_interruptions': False,
+    }
+    for number, turn in enumerate(index.turns):
+        start = bisect_left(positions, turn['first_step'])
+        end = (bisect_left(positions, index.turns[number + 1]['first_step'])
+               if number + 1 < len(index.turns) else len(positions))
+        in_turn = positions[start:end]
+        turn['database_only_quota_steps'] = in_turn
+        if in_turn:
+            turn['execution_complete'] = 'interrupted_by_recorded_quota_event'
     return out

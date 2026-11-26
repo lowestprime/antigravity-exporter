@@ -75,13 +75,41 @@ class ReleaseAutomationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'version'):
             release.validate_context('push','refs/heads/main',SHA,'1.0.0;echo unsafe')
 
-    def test_version_pair_must_match(self):
-        (self.root/'antigravity_exporter').mkdir()
-        (self.root/'antigravity_exporter/__init__.py').write_text('__version__ = "0.3.0rc3"\n')
-        p=self.root/'pyproject.toml';p.write_text('[project]\nversion = "0.3.0rc3"\n')
-        self.assertEqual(release.package_version(self.root),VERSION)
-        p.write_text('[project]\nversion = "0.3.0rc2"\n')
-        with self.assertRaisesRegex(ValueError,'disagree'):release.package_version(self.root)
+    def write_version_files(self, version='0.4.0', module_version='0.4.0', prerelease=None):
+        (self.root/'antigravity_exporter').mkdir(exist_ok=True)
+        (self.root/'antigravity_exporter/__init__.py').write_text(f'__version__ = "{version}"\n')
+        (self.root/'pyproject.toml').write_text(f'[project]\nversion = "{version}"\n')
+        suffix = f"            Prerelease = '{prerelease}'\n" if prerelease is not None else ''
+        (self.root/'AntigravityExporter.psd1').write_text(
+            "@{\n    ModuleVersion = '" + module_version + "'\n    PrivateData = @{\n        PSData = @{\n" +
+            suffix + "        }\n    }\n}\n")
+
+    def test_all_three_version_declarations_must_match(self):
+        self.write_version_files()
+        self.assertEqual(release.package_version(self.root), '0.4.0')
+        (self.root/'pyproject.toml').write_text('[project]\nversion = "0.3.0rc3"\n')
+        with self.assertRaisesRegex(ValueError, 'disagree'):
+            release.package_version(self.root)
+        self.write_version_files(module_version='0.3.0')
+        with self.assertRaisesRegex(ValueError, 'disagree'):
+            release.package_version(self.root)
+        (self.root/'AntigravityExporter.psd1').unlink()
+        with self.assertRaises(FileNotFoundError):
+            release.package_version(self.root)
+
+    def test_powershell_prerelease_is_normalized_and_checked(self):
+        self.write_version_files(version=VERSION, module_version='0.3.0', prerelease='rc3')
+        self.assertEqual(release.package_version(self.root), VERSION)
+        for module_version, suffix in [('0.3.0', None), ('0.3.0', 'rc2'), ('0.3.0rc3', None), ('0.3.0', 'beta1')]:
+            with self.subTest(module_version=module_version, prerelease=suffix):
+                self.write_version_files(version=VERSION, module_version=module_version, prerelease=suffix)
+                with self.assertRaisesRegex(ValueError, 'disagree'):
+                    release.package_version(self.root)
+        self.write_version_files()
+        p=self.root/'AntigravityExporter.psd1'
+        p.write_text(p.read_text()+"ModuleVersion = '0.4.0'\n")
+        with self.assertRaisesRegex(ValueError, 'disagree'):
+            release.package_version(self.root)
 
     def test_version_specific_notes(self):
         result=release.notes_for_version('# Changelog\n\n## 0.3.0rc3 — fix\nnew\n\n## 0.3.0rc2 — old\nold\n',

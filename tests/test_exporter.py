@@ -324,11 +324,11 @@ class RenderArchiveTests(Base):
         self.assertTrue(self.export('--stable-filenames','--collision','skip')['skipped_existing'])
     def test_output_inside_source_rejected(self):
         with self.assertRaises(ExportError):self.export('--out-dir',str(self.root/'bad-output'))
-    def test_source_copy_of_filtered_view_still_full(self):
+    def test_source_copy_of_filtered_view_matches_selected_scope(self):
         result=self.export('--last-n-turns','1')
         self.assertEqual(result['selected_records'],3)
         with zipfile.ZipFile(result['archive']) as z:
-            self.assertEqual(z.read(next(n for n in z.namelist() if n.endswith('.jsonl'))),self.raw)
+            self.assertEqual(z.read(next(n for n in z.namelist() if n.endswith('.jsonl'))),b''.join(self.raw.splitlines(keepends=True)[4:]))
     def test_tail_output_omission_is_recorded(self):
         result=self.export('--tool-outputs','tail','--max-tool-chars','10')
         with zipfile.ZipFile(result['archive']) as z:

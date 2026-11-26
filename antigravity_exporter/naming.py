@@ -67,5 +67,5 @@ def filename_stem(template,values):
     if name.lower().endswith('.md'): name=name[:-3]
     if not name: raise ValueError('Filename template produced an empty filename')
     if re.match(r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)',name,re.I):name='_'+name
-    # Reserve room for the longest standard member suffix (.manifest.json).
-    return name[:220].rstrip(' .')
+    # Reserve space for suffixes and enforce UTF-8 component bytes (also within NTFS UTF-16 limits).
+    return name.encode('utf-8')[:220].decode('utf-8',errors='ignore').rstrip(' .')
