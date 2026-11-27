@@ -68,6 +68,9 @@ Codex's transcript-specific packaging wrapper is excluded.
 | Missing source | Lists availability/capture diagnostics | SQLite/protobuf is not assumed to contain decoded full text |
 | Reduced source | Explicit `--allow-reduced` remains lossy acceptance | Never presented as a complete transcript |
 | Source capture | Verified bounded source prefix and read-only SQLite backup | Not a simultaneous snapshot across all application files |
+| Repeated/backward native steps | Preserve every observation in source order; bounded audits; optional strict rejection | Antigravity source ordinal is the record identity, not a Codex event-schema transplant |
+| Multipart name collisions | Detect normal and digest-shortened sets before publication | Adapted from pinned Codex `avoid_existing_archive` behavior |
+| Loose project publication | Prepare all selected sessions before publishing directories | Validation boundary matches archived batch preparation; multi-directory atomicity is not claimed |
 | Native excerpts | Selected raw source records/intervals retain original byte coordinates | Subset views no longer blindly reattach the entire native history |
 | Turn listings | Recorded user anchors, timestamps and source identities | Application-native step/record numbers remain distinct |
 | Incremental selection | Generic/typed since selectors, occurrence disambiguation, last-N | Includes the selected observed user turn through the captured boundary |
@@ -101,7 +104,7 @@ Codex's transcript-specific packaging wrapper is excluded.
 | Unknown-event sidecar | Explicit separate native-record sidecar, with share-mode redaction | Added |
 | Review text | Reversible UTF-8 parts, per-part hashes, bounded bytes; standalone conversion also obeys ZIP cap | Existing format retained; cap added |
 | Batch review selection | Exact Markdown member or unambiguous variant-qualified session ID | Added; only selected text/manifests decoded, no claim of entire input-ZIP verification |
-| Tokenizer | none/regex/auto/exact encoding counts and diagnostics | No count is called a Gemini billing count |
+| Tokenizer | none/regex/auto/exact encoding counts and diagnostics; bounded Unicode regex scan | No count is called a Gemini billing count; fewer callbacks preserve the same estimate |
 | Filename syntax | Product prefix; same timestamp/template/count vocabulary | Aligned where source semantics match |
 | Persistent settings | Existing output/template/archive preferences retained | Added fields receive defaults; explicit preferences survive |
 | Public source packaging | Allowlisted files, per-file hashes, no private transcripts | Preserved and expanded |

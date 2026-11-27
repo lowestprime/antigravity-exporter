@@ -1,6 +1,6 @@
 @{
     RootModule = 'AntigravityExporter.psm1'
-    ModuleVersion = '0.4.1'
+    ModuleVersion = '0.4.2'
     GUID = '475602fb-37d5-4378-9f99-38546237d7e4'
     Author = 'lowestprime'
     CompanyName = 'Community'

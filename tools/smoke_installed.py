@@ -1,7 +1,7 @@
 """Exercise the installed wheel's CLI outside the checkout with synthetic data.
 
 Run with the same Python environment in which the wheel was installed:
-    python tools/smoke_installed.py --expected-version 0.4.1
+    python tools/smoke_installed.py --expected-version 0.4.2
 No repository package or test fixture is imported by this script.
 """
 from __future__ import annotations
@@ -18,6 +18,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import zipfile
 
 
 CHECKOUT = Path(__file__).resolve().parents[1]
@@ -161,10 +162,43 @@ def main():
                 'Human listing omitted the session identity, source size, recorded date or readable labels.')
         require('\x1b[' not in human, 'Redirected human listing contains terminal control sequences.')
         require(snapshot(source) == before, 'Read-only listings modified their synthetic source store.')
-        require(config.read_bytes() == config_before, 'Read-only diagnostics/listings modified saved configuration.')
+
+        # Exercise a project export from the installed wheel, not only imports.
+        transcript=source/'antigravity'/'brain'/SESSION/'.system_generated'/'logs'/'transcript_full.jsonl'
+        rows=[{'step_index':0,'type':'USER_INPUT','source':'USER_EXPLICIT','status':'DONE','content':'Synthetic prompt'},
+              {'step_index':7,'type':'PLANNER_RESPONSE','source':'MODEL','status':'DONE','content':'First observation ✓'},
+              {'step_index':8,'type':'GENERIC','source':'TOOL','status':'DONE','content':'Synthetic output'},
+              {'step_index':7,'type':'PLANNER_RESPONSE','source':'MODEL','status':'DONE','content':'Different recorded observation ✓'}]
+        raw=b''.join((json.dumps(row,ensure_ascii=False)+'\r\n').encode('utf-8') for row in rows)
+        transcript.write_bytes(raw);before=snapshot(source)
+        output=work/'exports'
+        export_args=['export','--root',str(source),'--project',PROJECT_NAME,'--out-dir',str(output),
+                     '--no-progress','--json','--raw-jsonl','--review']
+        exported=json.loads(invoke(export_args).stdout)
+        require(exported['selected_records']==len(rows), 'Installed project export lost repeated source observations.')
+        require(exported['source_step_order']['duplicate_occurrences']==1 and
+                exported['source_step_order']['backward_transitions']==1,
+                'Installed project export omitted source-order diagnostics.')
+        with zipfile.ZipFile(exported['archive']) as archive:
+            native=next(name for name in archive.namelist() if name.endswith('.jsonl') and not name.endswith('.records.jsonl'))
+            structured=next(name for name in archive.namelist() if name.endswith('.records.jsonl'))
+            require(archive.read(native)==raw, 'Installed project export changed original JSONL bytes.')
+            require([json.loads(line) for line in archive.read(structured).splitlines()]==rows,
+                    'Installed structured JSONL changed source order or content.')
+        verification=json.loads(invoke(['verify',exported['archive']]).stdout)
+        require(verification['embedded_manifest_hashes_matched'] and verification['complete_set_verified'],
+                'Installed project archive did not pass member/manifest verification.')
+        before_outputs=snapshot(output)
+        strict=invoke([*export_args,'--strict-step-order'],expected_code=2)
+        require('source record 4' in strict.stderr and 'byte ' in strict.stderr and SESSION in strict.stderr,
+                'Installed strict-order rejection omitted source context.')
+        require(snapshot(output)==before_outputs, 'Strict failure changed existing outputs or published partial output.')
+        require(snapshot(source)==before, 'Project export modified its synthetic application-owned source.')
+        require(config.read_bytes() == config_before, 'Diagnostics/listings/exports modified saved configuration.')
 
         print(f'PASS: {commands} installed-package subprocess checks; version {version}; '
-              'isolated import, doctor, tokenizer, required optional codec, JSON/human sessions and source integrity.')
+              'isolated import, doctor, tokenizer, JSON/human sessions, project source-order preservation, '
+              'archive verification, strict rejection and source integrity.')
     return 0
 
 

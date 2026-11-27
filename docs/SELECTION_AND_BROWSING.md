@@ -24,19 +24,24 @@ truncated preview or a regular expression.
 
 When text or a native-ID prefix matches several distinct user turns, inspect
 the candidates and supply `--since-occurrence N` / `-Occurrence N`. Occurrences
-are 1-based in recorded chronology. Repeated prompts are not deduplicated just
+are 1-based in captured source order. Repeated prompts are not deduplicated just
 because their strings match. Exact IDs take priority over native-ID prefixes.
 Recorded `step:N` anchors require an exact step number; they are identified as
-coordinates, not fabricated native message UUIDs.
+coordinates, not fabricated native message UUIDs. A repeated exact `step:N` user
+anchor is also ambiguous; supply an observed turn number or occurrence. Native
+steps are not guaranteed unique or increasing. `--step N` retains every matching
+source occurrence; `--message N` selects one 1-based source ordinal. `--since`
+uses the ordinal, so a later lower native step is not accidentally dropped.
+See [record-order guarantees](RECORD_ORDER.md).
 
 An ISO date means midnight in the machine's local timezone. A clock timestamp
 requires `Z` or an explicit offset. Missing/invalid/naive recorded timestamps do
 not participate in instant comparison. The first user turn at or after the
 threshold is selected; the exporter does not invent a timestamp for missing
-records. Selections include the chosen user turn and its chronological suffix.
+records. Selections include the chosen user occurrence and its captured-source suffix.
 Mutually incompatible lower bounds or per-message selectors are rejected.
 
-The selection manifest records the resolved turn/step, captured source offset,
+The selection manifest records the resolved turn/step and source ordinal, captured source offset,
 source-record SHA-256, prompt-text SHA-256, match count and occurrence. It records
 the query's hash instead of copying a potentially sensitive search phrase into
 extra provenance. Selected native JSONL is drawn from the captured source, with

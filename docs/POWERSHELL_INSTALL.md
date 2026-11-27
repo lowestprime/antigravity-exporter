@@ -1,6 +1,6 @@
 # Permanent PowerShell installation
 
-Antigravity Exporter 0.4.1 includes a PowerShell module manifest with explicit
+Antigravity Exporter 0.4.2 includes a PowerShell module manifest with explicit
 function and alias exports. Installing it in a standard module directory makes
 `agy-*` commands discoverable in new PowerShell 7 sessions. The installer does
 not need to add a loader to any profile.
@@ -19,7 +19,7 @@ agy-doctor
 ```
 
 The default Windows destination is the active PowerShell 7 user module root,
-usually `Documents\PowerShell\Modules\AntigravityExporter\0.4.1`. The actual root
+usually `Documents\PowerShell\Modules\AntigravityExporter\0.4.2`. The actual root
 is derived from the current-user all-hosts profile directory and checked against
 `PSModulePath`; a redirected Documents folder is supported. On Linux and macOS,
 the user module root is under `XDG_DATA_HOME` or `~/.local/share/powershell`.
@@ -75,14 +75,14 @@ unqualified automatic discovery would require changing your chosen
 For an isolated copy outside module discovery:
 
 ```powershell
-.\Install-AntigravityExporter.ps1 -Scope Portable -Destination 'D:\Tools\AntigravityExporter\0.4.1'
-Import-Module 'D:\Tools\AntigravityExporter\0.4.1\AntigravityExporter.psd1'
+.\Install-AntigravityExporter.ps1 -Scope Portable -Destination 'D:\Tools\AntigravityExporter\0.4.2'
+Import-Module 'D:\Tools\AntigravityExporter\0.4.2\AntigravityExporter.psd1'
 ```
 
 For backward compatibility, an explicit `-Destination` without `-Scope` implies
 `Portable`. To install a custom current-user module root, explicitly supply both
 `-Scope CurrentUser` and `-Destination`; its parent module root must already be
-in `PSModulePath`, and the destination must end in `AntigravityExporter/0.4.1`.
+in `PSModulePath`, and the destination must end in `AntigravityExporter/0.4.2`.
 
 Previous versions are retained. To activate an earlier manifest-bearing version
 in a session, remove the loaded module and import its exact manifest path. An

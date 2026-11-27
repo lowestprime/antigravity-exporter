@@ -1,4 +1,4 @@
-# Antigravity Exporter 0.4.1
+# Antigravity Exporter 0.4.2
 
 Export recorded Google Antigravity conversations to Markdown and verified ZIP
 archives. Resolve real storage identities across desktop/IDE/CLI catalogs,
@@ -11,6 +11,27 @@ Python dependencies. Default LZMA encoding requires an existing compatible
 7-Zip CLI. Windows PowerShell helpers target PowerShell 7.
 
 ## What changed
+
+### 0.4.2 project exports and source-order preservation
+
+- Fix project/thread exports rejecting repeated or backward native step numbers.
+  Every valid source occurrence remains in captured order and in byte-exact native
+  JSONL. Source message ordinals identify observations; native steps remain unchanged.
+- Audit repeated IDs, byte-identical versus different source lines, backward
+  transitions and distinct-step gaps. `--strict-step-order` explicitly restores
+  rejection for workflows that require increasing, unique native steps.
+- Select inclusive `since` suffixes by source ordinal. Separate database step-set
+  coverage from one-to-one record correspondence, and avoid inferred chronology
+  or tool-sidecar assignments when native identifiers are ambiguous.
+- Honor multipart output collisions, including digest-shortened long names.
+  `--collision rename`, `skip` and `error` apply before recompressing an existing set.
+- Defer loose project/batch publication until every selected source is prepared.
+  Failures identify the session, source and retention option for diagnosis.
+- Count regex token estimates in bounded text chunks with fewer progress callbacks.
+  Preserve the estimate and line/byte counts while bounding long-line allocation.
+
+See [record order and project exports](docs/RECORD_ORDER.md) for guarantees,
+selection behavior, diagnostics and a comprehensive project-export example.
 
 ### 0.4.1 diagnostics and session tables
 
@@ -162,9 +183,13 @@ inclusive of the matched recorded human turn. Ambiguous prompt text requires
 `--since-occurrence N`. `--last-n-turns`, message ordinals and exact step bounds
 remain available. Indices retain their original meaning after sorting.
 
-Database diagnostic text follows the rendered step span, including terminal
-rows when the final recorded event is selected. Whole-session coverage counts
-remain visible; earlier diagnostic text is omitted from a later-turn view.
+Full-record exports preserve every database-only diagnostic, including history
+before the first readable source event. For partial views with increasing unique
+native steps, diagnostic text follows the rendered span, including terminal rows
+when the final source record is selected.
+When steps repeat or move backward, a complete view appends database diagnostics
+as unassigned session evidence. Partial views omit those payloads because their
+selection membership is unknown. Whole-session coverage counts remain visible.
 `--include-native` and `--include-artifacts` explicitly capture whole-session
 native stores and artifacts, even when the readable view is a subset.
 

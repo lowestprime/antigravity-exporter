@@ -74,7 +74,7 @@ def turn_listing(index):
 
 
 def resolve_since(index, args):
-    """Return selection audit and set args.from_step to the inclusive user anchor.
+    """Return selection audit and set args.from_message to the inclusive user anchor.
 
     Only one of --since, --since-turn, --since-id, --since-text and --since-time
     may be specified. Existing upper bounds may narrow the suffix; competing
@@ -134,7 +134,7 @@ def resolve_since(index, args):
         if matched:
             matches.append(anchor)
             if kind == 'time':
-                break  # Match Codex: first chronological user turn at/after the instant.
+                break  # First recorded user occurrence at/after the instant in source order.
     if not matches and kind == 'id':
         matches = prefix_matches
     if not matches:
@@ -143,11 +143,12 @@ def resolve_since(index, args):
         raise ExportError(f'Occurrence {occurrence} exceeds {len(matches)} matching user turns.')
     if len(matches) > 1 and occurrence is None:
         candidates = '\n'.join(f"  turn:{m['turn']} | id:{m['anchor_id']} | {m.get('start_utc') or 'no timestamp'} | {m['preview']}" for m in matches[:20])
-        raise ExportError(f'Selector matches {len(matches)} user turns. Use --since-occurrence N or an exact turn/step anchor.\n{candidates}')
+        raise ExportError(f'Selector matches {len(matches)} user turns. Use --since-occurrence N or an exact turn number.\n{candidates}')
     anchor = matches[(occurrence or 1) - 1]
-    args.from_step = anchor['first_step']
+    args.from_message = anchor['first_ordinal']
     return {'kind': kind, 'query_sha256': hashlib.sha256(query.encode('utf-8')).hexdigest(),
             'occurrence': occurrence, 'matching_turns': len(matches), 'inclusive': True,
             'turn': anchor['turn'], 'first_step': anchor['first_step'],
+            'first_ordinal': anchor['first_ordinal'], 'selection_coordinate': 'source_ordinal',
             'anchor_id': anchor['anchor_id'], 'source_offset': anchor['source_offset'],
             'source_sha256': anchor['source_sha256'], 'text_sha256': anchor['text_sha256']}
