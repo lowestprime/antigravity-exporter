@@ -29,8 +29,8 @@
       "sha256": "987b066b9fe55be30aa5af456ab00815f5bcc1156d8341aade7d3650dcfa9a74"
     },
     ".github/workflows/validate.yml": {
-      "bytes": 2097,
-      "sha256": "7c433bad40f7fefb304216594c8d65b48d1fbb55cdbbe62c4fdb57eaa6e104f6"
+      "bytes": 2164,
+      "sha256": "972279dcadfa33e203667bbbbf030be5f8a66b6b3cf048cf8ee8f23ad626a0fa"
     },
     ".gitignore": {
       "bytes": 226,
@@ -38,15 +38,15 @@
     },
     "AntigravityExporter.psd1": {
       "bytes": 3405,
-      "sha256": "7ce0d551078aed99d6af5e961d0e9528ec31d3a652627dfb303d4b278ebd951b"
+      "sha256": "0377af7a3a001371b90d796cf7b23518bf910e7087bae177bb98189ecbb811c8"
     },
     "AntigravityExporter.psm1": {
       "bytes": 20797,
       "sha256": "a46e16a1036846255fc720112f2fbae8b7b8c4f8450839a9b0aac1a049c51131"
     },
     "CHANGELOG.md": {
-      "bytes": 4252,
-      "sha256": "b2febe65d8f5435424cd559bd18a98145b4ce60ae1be69ec7aa4b269ea14a430"
+      "bytes": 5522,
+      "sha256": "677a30edfd698823b0f73cf0edd19af5d6611bd1bd3306d855287d2788791782"
     },
     "CONTRIBUTING.md": {
       "bytes": 1265,
@@ -77,8 +77,8 @@
       "sha256": "47150165ab71f5f6da2cb757de730260d80f794eefa1feabecf704df775b899c"
     },
     "README.md": {
-      "bytes": 14204,
-      "sha256": "c9b36e3acf7d6fb04aa5957e2aaf0c84c0f8fc3eabbfad15da9ea94bec4b8dac"
+      "bytes": 15101,
+      "sha256": "2a36ae69d52aaecfdbd80b182a456833d8b7e333e8b9253e1e10be57aaac90c0"
     },
     "SECURITY.md": {
       "bytes": 1663,
@@ -89,8 +89,8 @@
       "sha256": "6629ce879736f23b81bea952a237c97b3a7b97ee515257eacd4876cfb127559d"
     },
     "Test-AntigravityCli.ps1": {
-      "bytes": 6300,
-      "sha256": "4f2bdc8e0836e1484609faf75c9cf58fa390db7300e8217927c551218a94575b"
+      "bytes": 8419,
+      "sha256": "117da3d907350750bf0b8e9792a2828e5d609600bd1cdea901cd035ec3e5a118"
     },
     "Test-AntigravityExporter.ps1": {
       "bytes": 1699,
@@ -106,7 +106,7 @@
     },
     "antigravity_exporter/__init__.py": {
       "bytes": 79,
-      "sha256": "1d2043369c312feb1bf2957d814c6c50296934f18db4cbf6aa204d0c968d11bc"
+      "sha256": "8872a444b31e749a364426073abbaee8164abeedef1a4f7eaf97ee4401464837"
     },
     "antigravity_exporter/__main__.py": {
       "bytes": 47,
@@ -173,8 +173,8 @@
       "sha256": "01ccdc4a5646e65571acb3b9684b34b8c973bf39027be2e2d6cd7cd901c0e376"
     },
     "antigravity_exporter/cli.py": {
-      "bytes": 65159,
-      "sha256": "cf91a72d6e18026b4d88ef2dca6104dbb3a11c0e32c97c247e6d05913753746e"
+      "bytes": 65651,
+      "sha256": "3e14f9c35594922e1f1acd9636b3ce8abd1ee3c5cfb798e4a48d0e398cec6eca"
     },
     "antigravity_exporter/file_access.py": {
       "bytes": 231,
@@ -185,8 +185,8 @@
       "sha256": "e8ff6b0f10ce42a925f029768587958e516e5a9804f1951618d1eab170f3bcbd"
     },
     "antigravity_exporter/listings.py": {
-      "bytes": 22223,
-      "sha256": "e72f19f0b214812846c9497c2051a4157eaa685c57b5e564a9a3f8990041b13a"
+      "bytes": 28108,
+      "sha256": "faa6bf884bcac8151819165c450114ecd5e8a8200996a7e284c4ada786eb47e8"
     },
     "antigravity_exporter/model.py": {
       "bytes": 28055,
@@ -213,8 +213,8 @@
       "sha256": "1aa911f2a0f1747619c0cb095accb0ce156daebfed5768abfd654c9fcff61b27"
     },
     "antigravity_exporter/timestamps.py": {
-      "bytes": 10168,
-      "sha256": "67e105e87b68c6bc822ff9583d3d729a5174867e66beff1dbb6e7e651801014c"
+      "bytes": 10660,
+      "sha256": "eb2a6c1cc82ef408be172b2a65192b2a98ee7c887b5d1436387f6dc7b2203b28"
     },
     "bash/antigravity-exporter.sh": {
       "bytes": 5032,
@@ -230,31 +230,31 @@
     },
     "docs/POWERSHELL_INSTALL.md": {
       "bytes": 7263,
-      "sha256": "df892e33d09af87b180091fd952a3f7dee84e2c4d1f3b760dc472860c65b8202"
+      "sha256": "2dae562a6b726b78b1e617b7e4fd4a1864ff9e212a345cbb12e179adec67a63f"
     },
     "docs/PUBLISHING.md": {
       "bytes": 7670,
-      "sha256": "16c77320717d3ddb9306967e379a183a262ffea1677fbc4ba611a8cb97c39034"
+      "sha256": "a2954cda7aab1b24a24ca7338a762a89d3c37225b6d65661dc75bfcfa98c9e02"
     },
     "docs/REFERENCE_INVENTORY.json": {
       "bytes": 74996,
       "sha256": "9082f029f5d9e0ec837746e6b3ee3c68fdbe7752f31cfe96e426a1aaf7d1b697"
     },
     "docs/SELECTION_AND_BROWSING.md": {
-      "bytes": 4424,
-      "sha256": "354a39e2e231803a467e9b2d17874d0cfdff7343e1faffc7abc7baf1e12f710f"
+      "bytes": 6661,
+      "sha256": "395ea560210f7c281f96a37380c71067a6a8cf44f27a68bd5cf5c7f3266dde67"
     },
     "docs/SOURCE_RESOLUTION.md": {
       "bytes": 5601,
       "sha256": "8640dea6a61881b4fb6bde51aa533d5321bac75b032baa7e1f9c233e53f0da72"
     },
     "docs/VALIDATION.md": {
-      "bytes": 13738,
-      "sha256": "364a432b4d8ea3f7e8e258a8349036405d3d07f539bf6b28fe7fb1bc49a4d6b2"
+      "bytes": 15788,
+      "sha256": "b7e5d419a8ba4c92808b0428c8469ad21e9a9abbdb2338363cb07ea2acd7d926"
     },
     "pyproject.toml": {
       "bytes": 920,
-      "sha256": "d5965262dccf7a025384acaffea83b34cad2628b28cb424d8f5356b2c3275728"
+      "sha256": "1128fcb3749b09f06ccda1973e97bba8b28f1e5c1fd39de6c025be45ce6af70d"
     },
     "tests/test_archive_sets.py": {
       "bytes": 15166,
@@ -263,6 +263,10 @@
     "tests/test_bash_helpers.py": {
       "bytes": 5233,
       "sha256": "89d2544e4b5709150e205901751495d73bb4caafa929190e59adc04372f0ec48"
+    },
+    "tests/test_diagnostics.py": {
+      "bytes": 6899,
+      "sha256": "a1ed6ae705864524fb517c16b982f1a67b3f5a7cb8bf97be93c5d5eb9c300839"
     },
     "tests/test_direct_inputs.py": {
       "bytes": 8109,
@@ -297,8 +301,8 @@
       "sha256": "b77e6d2d997ff4c39ad7db71eb2782dbcf24694fd09373430e6304c339938459"
     },
     "tests/test_selection_listing.py": {
-      "bytes": 7933,
-      "sha256": "cf8c30beba581663082a526fc77122c64f0f5f0e61ab815869cb2b3dce3b4bfc"
+      "bytes": 15856,
+      "sha256": "cb5ab4f570209fd9bb18e249a8e91b9430c0dd7f3c9a6b84cb61555c788768ad"
     },
     "tests/test_source_resolution.py": {
       "bytes": 14983,
@@ -327,6 +331,10 @@
     "tools/smoke_external.py": {
       "bytes": 1133,
       "sha256": "3d0d3462680a737f23aeb36e011c14783f839a397b71f4b875ef1e8deeab92db"
+    },
+    "tools/smoke_installed.py": {
+      "bytes": 10122,
+      "sha256": "918aa44efd9a7f0be32ebf8ecc27738e8edfa88b90c06d3a2b4fa2cbba31702c"
     }
   },
   "schema": "public-source-allowlist/1"

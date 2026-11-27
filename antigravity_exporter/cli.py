@@ -31,7 +31,7 @@ from .archive import build_zip, diagnose, preflight, verify_zip
 from .progress import Progress
 from .archive_set import package_members
 from .selection import resolve_since, turn_listing, preview
-from .listings import DisplaySettings, sort_rows, print_listing
+from .listings import DisplaySettings, sort_rows, print_listing, session_listing_lines
 from .timestamps import TimestampFormatter
 from .naming import DEFAULT_TEMPLATE, STABLE_TEMPLATE, FIELDS, safe_slug, export_stamp, mode_descriptor, count_suffix, filename_stem
 
@@ -183,7 +183,7 @@ def parser():
     q.add_argument('--archive',action=argparse.BooleanOptionalAction,default=True)
     q=sub.add_parser('diagnose-access'); q.add_argument('path')
     q=sub.add_parser('repair-access'); q.add_argument('path')
-    q=sub.add_parser('tokenizer');q.add_argument('--token-encoding',default='cl100k_base');q.add_argument('--tokenizer',choices=['none','auto','regex','tiktoken']);q.add_argument('--require-tiktoken',action='store_true')
+    q=sub.add_parser('tokenizer');q.add_argument('--token-encoding');q.add_argument('--tokenizer',choices=['none','auto','regex','tiktoken']);q.add_argument('--require-tiktoken',action='store_true')
     return p
 
 def normalized_argv(argv):
@@ -682,11 +682,19 @@ def run(args):
         from .file_access import diagnose_access, repair_export_access
         return diagnose_access(Path(args.path).expanduser()) if args.command=='diagnose-access' else repair_export_access([Path(args.path).expanduser()])
     if args.command=='tokenizer':
-        import importlib.metadata
+        from importlib.metadata import PackageNotFoundError, version as distribution_version
+        c=load_config()
+        configured='tiktoken' if args.require_tiktoken else args.tokenizer or c['tokenizer']
         present=importlib.util.find_spec('tiktoken') is not None
-        return {'version':__version__,'python':sys.executable,'configured':args.tokenizer or load_config()['tokenizer'],
-                'encoding':args.token_encoding,'tiktoken_installed':present,
-                'tiktoken_version':importlib.metadata.version('tiktoken') if present else None,
+        if configured=='tiktoken' and not present:
+            raise ExportError('tiktoken is not installed in the selected Python environment')
+        version=None
+        if present:
+            with contextlib.suppress(PackageNotFoundError):version=distribution_version('tiktoken')
+        return {'version':__version__,'python':sys.executable,'configured':configured,
+                'encoding':args.token_encoding or c['token_encoding'],'tiktoken_installed':present,
+                'tiktoken_version':version,'tiktoken_metadata_found':version is not None,
+                'availability_probe_only':True,'tiktoken_required':configured=='tiktoken',
                 'regex':'approximation only; never provider billing tokens',
                 'exact_limit_default_bytes':64*1024*1024,'no_network_or_installation_performed':True}
     if args.command=='doctor':
@@ -720,6 +728,7 @@ def run(args):
     if any(getattr(args,key,0) is not None and getattr(args,key,0)<0 for key in ('step','from_step','to_step','max_tool_chars')):
         raise ExportError('Step numbers and maximum tool characters cannot be negative')
     args._display=DisplaySettings(options['sort'],options['sort_order'],options['pager'],options['page_size'])
+    args._timestamp_timezone=options['timestamp_timezone']
     progress=Progress('off' if args.no_progress else options['progress_style'])
     work_parent=Path(options['work_dir']).expanduser().resolve() if options['work_dir'] else None
     if work_parent:
@@ -848,12 +857,11 @@ def main(argv=None):
         listing=args.command in ('sessions','projects','turns','records','responses')
         if listing and not args.json:
             lines=[]
-            if args.command in ('sessions','projects'):
-                for s in result:
-                    if args.command=='projects':lines.append(f"{s['project']}  {s['sessions']} sessions  {s['exportable']} full  id={s['id']}")
-                    else:
-                        title=preview(s['title'],100000 if args.full_session_titles else 140)
-                        lines.append(f"{s.get('selector',s['id'])}  {title}  full={has_full_transcript(s)}  db={s['db']}  project={preview(s['project'],80)}")
+            if args.command=='sessions':
+                lines=session_listing_lines(result,full_titles=args.full_session_titles,
+                                            timezone_name=args._timestamp_timezone,settings=args._display)
+            elif args.command=='projects':
+                for s in result:lines.append(f"{s['project']}  {s['sessions']} sessions  {s['exportable']} full  id={s['id']}")
             else:
                 for block in result if isinstance(result,list) else [result]:
                     lines.append(block['session'].get('selector',block['session']['id'])+'  '+preview(block['session']['title'],140))

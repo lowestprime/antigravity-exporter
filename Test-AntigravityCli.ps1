@@ -46,12 +46,51 @@ con=sqlite3.connect(db);con.execute('CREATE TABLE conversation_summaries(convers
     $checks=[Collections.Generic.List[string]]::new()
     $sourceHash=(Get-FileHash -LiteralPath $transcript -Algorithm SHA256).Hash
     foreach ($helper in @('agy-exporter','antigravity-exporter','agy-help')) { & $helper --help | Out-Null; $checks.Add($helper) }
+    # The real entry point must execute the diagnostic branch, not only --help.
+    $doctor=agy-doctor | ConvertFrom-Json
+    $moduleVersion=(Import-PowerShellDataFile (Join-Path $sourceRoot 'AntigravityExporter.psd1')).ModuleVersion
+    if ($doctor.version -ne $moduleVersion -or -not $doctor.executable -or
+        -not $doctor.codecs.lzma -or -not $doctor.codecs.zlib -or
+        -not $doctor.no_network_requests_or_package_installation_performed) {
+        throw 'Environment diagnostic JSON is incomplete.'
+    }
+    $checks.Add('agy-doctor')
     $token=agy-tokenizer -Tokenizer regex | ConvertFrom-Json
+    if ($token.configured -ne 'regex' -or -not $token.no_network_or_installation_performed) {
+        throw 'Tokenizer diagnostic JSON is incomplete.'
+    }
     $checks.Add('agy-tokenizer')
     $catalog=agy-sessions @common -Json | ConvertFrom-Json
-    if ($catalog.id -ne $id) { throw 'Session JSON mismatch' }
-    foreach ($helper in @('agy-projects','agy-sessions')) { & $helper @common -Pager never | Out-Null; $checks.Add($helper) }
-    foreach ($helper in @('agy-turns','agy-list','agy-responses','agy-audit')) { & $helper $id @common -Json | ConvertFrom-Json | Out-Null; $checks.Add($helper) }
+    if ($catalog.id -ne $id -or $catalog.title -ne 'Example thread') { throw 'Session JSON mismatch' }
+    # Captured/redirected output must contain complete rows for every pager mode.
+    # A real TTY deliberately uses the alternate-screen pager when appropriate.
+    foreach ($pager in @('auto','always','never')) {
+        $sessionsText=agy-sessions @common -Pager $pager | Out-String
+        if ($sessionsText -notlike "*$id*" -or $sessionsText -notlike '*Example thread*' -or
+            $sessionsText -notlike '*Full log*' -or $sessionsText -notlike '*JSONL size*' -or
+            $sessionsText -notlike '*Last modified*' -or $sessionsText.Contains([string][char]27)) {
+            throw "Human session output missing or contains terminal controls: pager=$pager"
+        }
+        $checks.Add('agy-sessions-'+$pager)
+    }
+    $projectsText=agy-projects @common -Pager never | Out-String
+    if ($projectsText -notlike '*Example Project*' -or $projectsText -notlike '*1 sessions*') {
+        throw 'Human project output missing.'
+    }
+    $checks.Add('agy-projects')
+    foreach ($helper in @('agy-turns','agy-list','agy-responses','agy-audit')) {
+        $listing=& $helper $id @common -Json | ConvertFrom-Json
+        if ($listing.session.id -ne $id) { throw "Listing JSON identity missing: $helper" }
+        $checks.Add($helper)
+    }
+    foreach ($helper in @('agy-turns','agy-list','agy-responses')) {
+        $listingText=& $helper $id @common -Pager never | Out-String
+        $expected=if ($helper -eq 'agy-turns') { 'Turn\s+1' } else { 'Message\s+\d+' }
+        if ($listingText -notlike "*$id*" -or $listingText -notmatch $expected) {
+            throw "Human listing content missing: $helper"
+        }
+        $checks.Add($helper+'-human')
+    }
     foreach ($helper in @('agy-thread','agy-chat','agy-actions','agy-final','agy-live','agy-fast')) { $archive=& $helper $id @export; if (-not (Test-Path -LiteralPath $archive)) { throw "Archive missing: $helper" }; $checks.Add($helper) }
     foreach ($helper in @('agy-turn','agy-response','agy-response-block','agy-msg')) { $archive=& $helper $id 1 @export; if (-not (Test-Path -LiteralPath $archive)) { throw "Archive missing: $helper" }; $checks.Add($helper) }
     $archive=agy-range $id 0 5 @export; $checks.Add('agy-range')

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 import math
 import os
 import re
@@ -20,6 +21,7 @@ from typing import Any, TextIO
 import unicodedata
 
 from .progress import _ANSI, _cells, _clip, _windows_vt
+from .timestamps import TimestampFormatter, parse_source_timestamp
 
 
 @dataclass(frozen=True)
@@ -73,19 +75,25 @@ def _number(value: Any) -> int | float | None:
         return None
 
 
-def _time(value: Any) -> float | None:
+def _time(value: Any) -> Decimal | None:
     number = _number(value)
     if number is not None:
-        return number
-    if value is None:
+        return Decimal(int(value)) if isinstance(value, bool) else Decimal(str(value).replace(',', ''))
+    stamp = parse_source_timestamp(value)
+    if stamp is None:
         return None
     try:
-        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-        # Catalog times without an offset are already local wall-clock values.
-        # Keep comparison deterministic and avoid machine-dependent DST guesses.
+        # Keep offset-free wall-clock ordering deterministic without presenting
+        # it to the user as an asserted UTC instant.
         if stamp.tzinfo is None:
             stamp = stamp.replace(tzinfo=timezone.utc)
-        return stamp.timestamp()
+        delta = stamp.astimezone(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        result = Decimal(delta.days * 86400 + delta.seconds) + Decimal(delta.microseconds).scaleb(-6)
+        # Retain observed catalog nanosecond ordering beyond datetime precision.
+        fraction = re.match(r'^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}:\d{2}[.,](\d+)', str(value).strip())
+        if fraction and len(fraction.group(1)) > 6:
+            result += Decimal('0.000000' + fraction.group(1)[6:])
+        return result
     except (ValueError, OverflowError, OSError):
         return None
 
@@ -300,6 +308,107 @@ def _wrap_lines(lines: Sequence[str], width: int) -> list[str]:
             cells += count
         result.append(''.join(segment))
     return result
+
+
+SESSION_HEADERS = ('Session selector', 'Conversation title', 'JSONL size', 'Last modified',
+                   'Transcript source', 'SQLite database', 'Project')
+
+
+def _human_jsonl_size(value: Any) -> str:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        return 'N/A'
+    if value < 1024:
+        return f'{value} B'
+    amount = float(value)
+    for unit in ('KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB'):
+        amount /= 1024
+        if amount < 1024 or unit == 'EiB':
+            return f'{amount:.1f} {unit}'
+    raise AssertionError('Unreachable byte-size unit')
+
+
+def _session_source(row: Mapping[str, Any]) -> str:
+    if row.get('full'):
+        return 'Full log'
+    if row.get('chunked_full') and row.get('chunks_contiguous'):
+        return 'Full chunks'
+    if row.get('reduced'):
+        return 'Reduced'
+    return 'Missing (invalid chunks)' if row.get('chunked_full') else 'Missing'
+
+
+def session_listing_lines(rows: Iterable[Mapping[str, Any]], *, full_titles: bool = False,
+                          timezone_name: str = 'local', settings: DisplaySettings | None = None,
+                          input_stream: TextIO | None = None,
+                          output_stream: TextIO | None = None) -> list[str]:
+    """Present source catalog metadata with readable units and labeled columns.
+
+    Selectors are never abbreviated; JSON values are neither changed nor added.
+    Pipes and --no-pager always receive the complete table. A narrow interactive
+    pager uses labeled records when its terminal cannot accommodate all headers.
+    """
+    settings = settings or DisplaySettings()
+    source = input_stream if input_stream is not None else sys.stdin
+    target = output_stream if output_stream is not None else sys.stdout
+    formatter = TimestampFormatter(True, timezone_name)
+    values = []
+    titles_clipped = False
+    def text(value: Any, fallback: str = 'Not recorded') -> str:
+        clean = _safe_line(' '.join(str(value).split())) if value is not None else ''
+        return clean or fallback
+    for row in rows:
+        title = text(row.get('title'))
+        if not full_titles and len(title) > 140:
+            title = title[:139] + '…'
+            titles_clipped = True
+        modified = row.get('modified')
+        missing_time = modified is None or (isinstance(modified, str) and not modified.strip())
+        date = 'Not recorded' if missing_time else formatter.format(modified) or 'Unknown'
+        database = 'Present' if row.get('db') is True else 'Missing' if row.get('db') is False else 'Unknown'
+        values.append((text(row.get('selector') or row.get('id'), 'Unknown'), title,
+                       _human_jsonl_size(row.get('size')), text(date), _session_source(row),
+                       database, text(row.get('project') or row.get('project_id'))))
+    widths = [max([_cells(header)] + [_cells(row[i]) for row in values])
+              for i, header in enumerate(SESSION_HEADERS)]
+    # Wrap verbose titles and project names without abbreviating identities.
+    for index, limit in ((1, 60), (6, 40)):
+        widths[index] = min(widths[index], limit)
+    interactive = settings.pager != 'never' and _isatty(source) and _isatty(target)
+    narrow = False
+    if interactive:
+        available = _terminal_size(target).columns - 1
+        while sum(widths) + 2 * (len(widths) - 1) > available:
+            flexible = [i for i in (1, 6) if widths[i] > _cells(SESSION_HEADERS[i])]
+            if not flexible:
+                narrow = True
+                break
+            widest = max(flexible, key=lambda i: widths[i] - _cells(SESSION_HEADERS[i]))
+            widths[widest] -= 1
+    if narrow and values:
+        lines = ['Session catalog (narrow terminal: every column is labeled below)', '']
+        for row in values:
+            lines.extend(f'{header}: {cell}' for header, cell in zip(SESSION_HEADERS, row))
+            lines.append('')
+    else:
+        def aligned(row: Sequence[str]) -> str:
+            return '  '.join(cell + ' ' * max(0, width - _cells(cell))
+                             for cell, width in zip(row, widths)).rstrip()
+        lines = [aligned(SESSION_HEADERS), aligned(tuple('-' * width for width in widths))]
+        for row in values:
+            wrapped = [_wrap_lines([cell], width) for cell, width in zip(row, widths)]
+            for index in range(max(len(cell) for cell in wrapped)):
+                lines.append(aligned(tuple(cell[index] if index < len(cell) else '' for cell in wrapped)))
+        if not values:
+            lines.append('No sessions matched.')
+        lines.append('')
+    lines.extend((
+        'JSONL size: available full log, otherwise contiguous full chunks (sum), otherwise reduced log; binary units (KiB/MiB/GiB).',
+        'Last modified: recorded conversation catalog time, displayed in the configured timezone; not filesystem modification time.',
+        'Transcript source and SQLite database describe file availability; history completeness is checked during audit/export.',
+        'Use --json for exact byte counts, original timestamps and source metadata.'))
+    if titles_clipped:
+        lines.append('Title previews end with … when shortened; --full-session-titles displays the complete title.')
+    return lines
 
 
 _WINDOWS_KEYS = {'H': 'up', 'P': 'down', 'K': 'left', 'M': 'right',

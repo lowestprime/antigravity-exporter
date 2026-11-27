@@ -1,17 +1,21 @@
 """Synthetic regressions for anchor selection and presentation-only sorting."""
 from __future__ import annotations
 from argparse import Namespace
+import contextlib
+import copy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from antigravity_exporter.model import EventIndex
 from antigravity_exporter.selection import resolve_since, turn_listing, parse_since_time
 from antigravity_exporter.storage import ExportError
-from antigravity_exporter.listings import DisplaySettings, print_listing, sort_rows
+from antigravity_exporter.listings import DisplaySettings, print_listing, sort_rows, session_listing_lines, SESSION_HEADERS
 from antigravity_exporter.browser import SessionBrowser, browse_sessions
 from antigravity_exporter.timestamps import TimestampFormatter, parse_source_timestamp
 
@@ -120,12 +124,140 @@ class ListingBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'unavailable'):browser.command('1')
 
 
+class SessionTableTests(unittest.TestCase):
+    def row(self, **changes):
+        return {'id':'11111111-2222-4333-8444-555555555555',
+                'selector':'antigravity:11111111-2222-4333-8444-555555555555',
+                'title':'Example conversation', 'size':13_002_342,
+                'modified':'2026-11-27T19:09:16.342105411Z',
+                'full':True,'db':True,'project':'Example project', **changes}
+
+    def format(self, rows, **options):
+        return session_listing_lines(rows,timezone_name='UTC',output_stream=io.StringIO(),
+                                     input_stream=io.StringIO(),**options)
+
+    def test_headers_human_units_date_and_source_identity_without_mutation(self):
+        row=self.row();before=copy.deepcopy(row)
+        lines=self.format([row])
+        self.assertTrue(all(header in lines[0] for header in SESSION_HEADERS))
+        self.assertIn(row['selector'],lines[2])
+        self.assertIn('12.4 MiB',lines[2])
+        self.assertIn('November 27, 2026 at 07:09:16 PM UTC',lines[2])
+        self.assertIn('Full log',lines[2]);self.assertIn('Present',lines[2])
+        self.assertIn('not filesystem modification time','\n'.join(lines))
+        self.assertEqual(row,before)
+
+    def test_headers_and_values_align_by_terminal_cells_with_unicode(self):
+        from antigravity_exporter.progress import _cells
+        lines=self.format([self.row(title='日🧠e\u0301'),self.row(title='ASCII')])
+        expected=_cells(lines[0][:lines[0].index('JSONL size')])
+        for line in lines[2:4]:
+            self.assertEqual(_cells(line[:line.index('12.4 MiB')]),expected)
+
+    def test_availability_labels_distinguish_chunks_reduced_missing(self):
+        for change,label in (({'full':False,'chunked_full':True,'chunks_contiguous':True},'Full chunks'),
+                             ({'full':False,'reduced':True},'Reduced'),
+                             ({'full':False,'size':None},'Missing'),
+                             ({'full':False,'chunked_full':True,'chunks_contiguous':False},'Missing (invalid chunks)')):
+            with self.subTest(label=label):
+                lines=self.format([self.row(**change)])
+                self.assertIn(label,lines[2])
+        self.assertIn('0 B',self.format([self.row(size=0)])[2])
+        self.assertIn('1.0 KiB',self.format([self.row(size=1024)])[2])
+        self.assertIn('N/A',self.format([self.row(size=None)])[2])
+
+    def test_naive_missing_invalid_and_date_only_are_not_invented_utc_instants(self):
+        for value,expected in ((None,'Not recorded'),('not a time','Unknown'),
+                               ('2026-11-27T19:09:16.342105411','timezone unspecified'),
+                               ('2026-11-27','time not recorded')):
+            with self.subTest(value=value):
+                lines=self.format([self.row(modified=value)])
+                self.assertIn(expected,lines[2])
+                self.assertNotIn(' UTC',lines[2])
+
+    def test_empty_catalog_keeps_column_headers_and_explains_no_match(self):
+        lines=self.format([])
+        self.assertTrue(all(header in lines[0] for header in SESSION_HEADERS))
+        self.assertIn('No sessions matched.',lines)
+
+    def test_narrow_pager_labels_all_values_and_no_pager_keeps_table(self):
+        class Terminal(io.StringIO):
+            def isatty(self):return True
+        streams={'input_stream':Terminal(),'output_stream':Terminal()}
+        with patch('antigravity_exporter.listings._terminal_size',return_value=os.terminal_size((65,20))):
+            lines=session_listing_lines([self.row()],settings=DisplaySettings(pager='auto'),**streams)
+            self.assertTrue(all(any(line.startswith(header+':') for line in lines) for header in SESSION_HEADERS))
+            self.assertTrue(any(self.row()['selector'] in line for line in lines))
+            table=session_listing_lines([self.row()],settings=DisplaySettings(pager='never'),**streams)
+            self.assertTrue(all(header in table[0] for header in SESSION_HEADERS))
+
+    def test_complete_title_flag_retains_printable_content_and_marks_default_preview(self):
+        row=self.row(title='A'*160+'END')
+        normal=self.format([row]);complete=self.format([row],full_titles=True)
+        self.assertIn('Title previews end with','\n'.join(normal))
+        self.assertNotIn('END','\n'.join(normal))
+        self.assertIn('END','\n'.join(complete))
+        self.assertNotIn('Title previews end with','\n'.join(complete))
+
+    def test_recent_sort_preserves_catalog_nanoseconds_and_missing_last(self):
+        rows=[self.row(id='early',modified='2026-11-27T19:09:16.100000001Z'),
+              self.row(id='missing',modified=''),
+              self.row(id='late',modified='2026-11-27T11:09:16.100000002-08:00'),
+              self.row(id='invalid',modified='not a date')]
+        self.assertEqual([row['id'] for row in sort_rows(rows,kind='sessions',sort='recent')],
+                         ['late','early','missing','invalid'])
+        self.assertEqual([row['id'] for row in sort_rows(rows,kind='sessions',sort='oldest')],
+                         ['early','late','missing','invalid'])
+
+
+class SessionCliTableTests(unittest.TestCase):
+    def test_public_cli_respects_saved_timezone_and_keeps_native_json_values(self):
+        from test_exporter import make_store, ID
+        from antigravity_exporter.cli import main
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory);root,log,raw=make_store(path)
+            stamp='2026-11-27T19:09:16.342105411Z'
+            with contextlib.closing(sqlite3.connect(root/'antigravity/conversation_summaries.db')) as connection,connection:
+                connection.execute('UPDATE conversation_summaries SET last_modified_time=?',(stamp,))
+            config=path/'config.json';config.write_text(json.dumps({'timestamp_timezone':'-08:00'}))
+            def invoke(*flags):
+                stdout,stderr=io.StringIO(),io.StringIO()
+                with contextlib.redirect_stdout(stdout),contextlib.redirect_stderr(stderr):
+                    code=main(['sessions','--root',str(root),'--no-progress',*flags])
+                self.assertEqual(code,0,stderr.getvalue());self.assertEqual(stderr.getvalue(),'')
+                return stdout.getvalue()
+            with patch.dict(os.environ,{'AGY_EXPORT_CONFIG':str(config)}):
+                rows=json.loads(invoke('--json'))
+                human=invoke('--no-pager')
+                empty=invoke('--no-pager','--query','definitely-no-match')
+                after=json.loads(invoke('--json'))
+            self.assertEqual(rows,after)
+            self.assertEqual(rows[0]['modified'],stamp);self.assertEqual(rows[0]['size'],len(raw))
+            self.assertTrue(all(header in human.splitlines()[0] for header in SESSION_HEADERS))
+            self.assertIn('November 27, 2026 at 11:09:16 AM UTC-08:00',human)
+            self.assertIn(ID,human);self.assertIn('Full log',human)
+            self.assertTrue(all(header in empty.splitlines()[0] for header in SESSION_HEADERS))
+            self.assertIn('No sessions matched.',empty)
+            self.assertEqual(log.read_bytes(),raw)
+
+
 class TimestampTests(unittest.TestCase):
     def test_dst_uses_recorded_instant(self):
         try: formatter=TimestampFormatter(True,'America/Los_Angeles')
         except ValueError: self.skipTest('IANA database unavailable')
         self.assertIn('PST',formatter.format('2026-01-01T12:00:00Z'))
         self.assertIn('PDT',formatter.format('2026-07-01T12:00:00Z'))
+
+    def test_fractional_widths_are_portable_and_preserve_timezone_policy(self):
+        formatter=TimestampFormatter(True,'UTC')
+        for digits in ('1','12','1234','12345','1234567','123456789'):
+            with self.subTest(digits=digits):
+                source='2026-11-27T11:09:16.'+digits+'-08:00'
+                self.assertEqual(formatter.format(source),'November 27, 2026 at 07:09:16 PM UTC')
+                self.assertIsNotNone(parse_source_timestamp(source))
+        self.assertIn('timezone unspecified',formatter.format('2026-11-27T11:09:16.123456789'))
+        self.assertIsNone(parse_source_timestamp('2026-13-27T11:09:16.123456789Z'))
 
     def test_zero_naive_invalid_and_disabled(self):
         formatter=TimestampFormatter(True,'UTC')

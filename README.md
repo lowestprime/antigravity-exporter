@@ -1,4 +1,4 @@
-# Antigravity Exporter 0.4.0
+# Antigravity Exporter 0.4.1
 
 Export recorded Google Antigravity conversations to Markdown and verified ZIP
 archives. Resolve real storage identities across desktop/IDE/CLI catalogs,
@@ -11,6 +11,22 @@ Python dependencies. Default LZMA encoding requires an existing compatible
 7-Zip CLI. Windows PowerShell helpers target PowerShell 7.
 
 ## What changed
+
+### 0.4.1 diagnostics and session tables
+
+- Fix `agy-doctor` / `doctor` failing with `UnboundLocalError` after a successful
+  installation. The tokenizer's metadata import no longer shadows the module
+  discovery import used by doctor.
+- Honor saved tokenizer encodings and explicit `--require-tiktoken` requirements.
+  Diagnostic discovery does not install packages or fetch encoding data.
+- Verify real doctor JSON and human listing content in CLI, PowerShell and
+  installed-wheel checks. Preserve existing export/archive defaults and settings.
+- Show descriptive session columns, JSONL size and recorded last-modified time,
+  with explicit missing-source values and original metadata retained in JSON.
+- Clarify the alternate-screen pager: use `agy-sessions --no-pager` to keep the
+  complete listing in terminal scrollback after the command exits.
+
+### 0.4.0 source and archive improvements
 
 - Respect the catalog's `app_data_dir` pointer. A CLI catalog row pointing into
   the desktop store is one storage identity, not a second fake conversation.
