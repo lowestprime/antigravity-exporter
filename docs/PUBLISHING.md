@@ -39,9 +39,9 @@ Keep all three release declarations aligned:
 - `AntigravityExporter.psd1`: `ModuleVersion` and, for a release candidate,
   `PrivateData.PSData.Prerelease`.
 
-For v0.4.1, all three version values are `0.4.1`, with no prerelease suffix.
+For v0.4.2, all three version values are `0.4.2`, with no prerelease suffix.
 PowerShell requires a numeric `ModuleVersion`; a future Python version such as
-`0.4.1rc1` corresponds to `ModuleVersion = '0.4.1'` and
+`0.4.2rc1` corresponds to `ModuleVersion = '0.4.2'` and
 `Prerelease = 'rc1'` inside `PrivateData.PSData`. Do not put `rc1` in ModuleVersion
 itself. The publication guard checks the normalized Python/PowerShell versions
 and rejects a disagreement. Keep the module GUID unchanged across upgrades.
@@ -56,11 +56,11 @@ on Linux, macOS and Windows, real ZIP/LZMA checks in all six jobs, Windows
 PowerShell validation, and distribution validation. It creates an annotated tag
 for that exact commit, uploads four checked assets to a draft, verifies their
 reported digests/sizes, and publishes. RC versions remain prereleases; a stable
-version such as v0.4.1 is published as the latest release only after those gates.
+version such as v0.4.2 is published as the latest release only after those gates.
 
-The four v0.4.1 assets are `antigravity-exporter-0.4.1.zip`,
-`antigravity_thread_exporter-0.4.1-py3-none-any.whl`,
-`antigravity_thread_exporter-0.4.1.tar.gz`, and `SHA256SUMS.txt`. The portable ZIP
+The four v0.4.2 assets are `antigravity-exporter-0.4.2.zip`,
+`antigravity_thread_exporter-0.4.2-py3-none-any.whl`,
+`antigravity_thread_exporter-0.4.2.tar.gz`, and `SHA256SUMS.txt`. The portable ZIP
 includes the PowerShell module, manifest, installer, tests and documentation. A
 Python wheel installation alone does not install the PowerShell module into a
 module discovery directory. See [POWERSHELL_INSTALL.md](POWERSHELL_INSTALL.md)

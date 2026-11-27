@@ -223,9 +223,9 @@ class IndexTests(Base):
         with self.assertRaises(ExportError):self.index()
     def test_invalid_opt_in_audited(self):
         self.log.write_bytes(self.raw+b'not json\n');idx=self.index(skip_invalid=True);self.assertEqual(len(idx.issues),1)
-    def test_duplicate_fails(self):
+    def test_duplicate_fails_with_explicit_strict_order(self):
         self.log.write_bytes(self.raw+self.raw.splitlines(keepends=True)[0])
-        with self.assertRaises(ExportError):self.index()
+        with self.assertRaises(ExportError):self.index(strict_step_order=True)
     def test_record_size_limit(self):
         with self.assertRaises(ExportError):self.index(max_record_bytes=30)
     def test_unknown_event_preserved(self):

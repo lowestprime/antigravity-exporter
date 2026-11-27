@@ -49,12 +49,36 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
     redactor=Redactor(options.get('redact',False))
     timestamps=TimestampFormatter(options.get('timestamps',True),options.get('timestamp_timezone','local'))
     recovered=[]; recovery_missing=[]; tool_omissions=[]; rendered=0
-    shown_supplements=[s for s in supplements if selection['first_step']<=s['step_index']<=selection['last_step']]
-    # Include terminal DB-only errors after the final JSONL event only if the view
-    # actually contains the last JSONL event; never hide the known interruption.
-    if selection['last_step']==index.audit['last_step']:
-        shown_supplements.extend(s for s in supplements if s['step_index']>selection['last_step'])
+    ordered=index.audit.get('step_order',{}).get('monotonic_unique',True)
+    all_selected=selection['records']==index.count
+    # With repeated/backward native IDs, a DB row cannot be placed between
+    # readable occurrences or assigned to a partial view by numeric range.
+    if not ordered:
+        shown_supplements=list(supplements) if all_selected else []
+        diagnostic_scope={'policy':'entire session diagnostics after all source records' if all_selected else
+                          'database-only rows omitted: repeated/backward native steps do not establish partial-selection membership',
+                          'placement':'separate appendix; native index order is not chronology',
+                          'temporal_association_inferred':False,
+                          'outside_selection_omitted':None,
+                          'unknown_selection_membership_omitted':0 if all_selected else len(supplements)}
+    else:
+        if all_selected:
+            # A full readable capture may begin after older SQLite-only history.
+            # Preserve those prefix diagnostics as well as internal/terminal rows.
+            shown_supplements=list(supplements)
+        else:
+            shown_supplements=[s for s in supplements if selection['first_step']<=s['step_index']<=selection['last_step']]
+            if selection['last_ordinal']==index.count:
+                shown_supplements.extend(s for s in supplements if s['step_index']>selection['last_step'])
+        diagnostic_scope={'policy':'entire session diagnostics, including rows before the readable prefix' if all_selected else
+                          'selected native-step span plus terminal rows when the final source record is selected',
+                          'placement':'native step order; source provenance remains separate',
+                          'outside_selection_omitted':len(supplements)-len(shown_supplements),
+                          'unknown_selection_membership_omitted':0}
+    diagnostic_scope.update(included=len(shown_supplements),omitted_count=len(supplements)-len(shown_supplements),
+                            coverage_counts_scope='entire captured session')
     supplemental=iter(sorted(shown_supplements,key=lambda s:s['step_index']))
+    ambiguous_recovery={}; step_multiplicity={}
     pending=next(supplemental,None)
     raw_jsonl=destination.with_suffix('.records.jsonl') if options.get('records_jsonl') else None
     raw_handle=raw_jsonl.open('w',encoding='utf-8',newline='\n') if raw_jsonl else None
@@ -69,7 +93,14 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
                 f.write('---\n'+'\n'.join(k+': '+json.dumps(v,ensure_ascii=False) for k,v in metadata.items())+'\n---\n\n')
             f.write('# '+redactor.text(session['title'])+' — Antigravity recorded history\n\n')
             f.write(f"- Conversation: `{session['id']}`\n- Project: `{session.get('project','')}`\n- Source SHA-256: `{source_info['sha256']}`\n")
-            f.write(f"- JSONL selection: {selection['records']} records, indices {selection['first_step']}–{selection['last_step']}.\n")
+            f.write(f"- JSONL selection: {selection['records']} records, native-step range {selection['first_step']}–{selection['last_step']}; source message ordinals {selection['first_ordinal']}–{selection['last_ordinal']}.\n")
+            if not ordered:
+                order=index.audit['step_order']
+                f.write(f"- **Source-order notice:** {order['duplicate_occurrences']} repeated native-step occurrence(s), {order['backward_transitions']} backward transition(s). Every selected record remains in captured source order; no deduplication, sorting, or revision inference.\n")
+                f.write('- Source message ordinals uniquely identify recorded observations. Repeated user-input observations each begin an observed turn; replay semantics and actual chronology are not inferred.\n')
+                if supplements:
+                    f.write('- Database-only rows cannot be assigned to readable occurrences or turns by native step number. '+
+                            ('They appear in a separate session appendix.' if all_selected else 'Their membership in this partial selection is unknown, so their payloads are omitted.')+'\n')
             if db_audit.get('db_only_steps'):
                 missing=len(db_audit['db_only_steps'])
                 f.write(f'- SQLite has **{missing} row(s) absent from the readable JSONL**; see manifest diagnostics. Missing historical content is not reconstructed.\n')
@@ -83,17 +114,18 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
                 f.write('- Complete NUL-only source gaps are disclosed in the manifest; no missing content is reconstructed.\n')
             f.write('\n')
             if options.get('export_map',True):
-                f.write('## Export map\n\n| User turn | Selected step span | Records |\n|---:|---|---:|\n')
-                for turn,first,last,n in index.con.execute('SELECT turn,MIN(step),MAX(step),COUNT(*) FROM selected GROUP BY turn ORDER BY MIN(ord)'):
+                f.write('## Export map\n\n| Observed user turn | Source message span | Native-step range | Records |\n|---:|---|---|---:|\n')
+                for turn,first,last,n,first_ord,last_ord in index.con.execute('SELECT turn,MIN(step),MAX(step),COUNT(*),MIN(ord),MAX(ord) FROM selected GROUP BY turn ORDER BY MIN(ord)'):
                     label=str(turn) if turn else 'Context before first user turn'
-                    f.write(f'| {label} | {first}–{last} | {n} |\n')
+                    f.write(f'| {label} | {first_ord}–{last_ord} | {first}–{last} | {n} |\n')
                 f.write('\n')
             for ordinal,original in index.records():
                 step=original['step_index']
-                while pending and pending['step_index']<step:
+                while ordered and pending and pending['step_index']<step:
                     f.write(supplement_md(pending,redactor)); pending=next(supplemental,None)
                 r=redactor.apply(original); typ=r.get('type','UNKNOWN'); role=r.get('source','UNKNOWN')
-                f.write(f"\n---\n\n## Step {step:06d} · {role} / {typ}\n\n")
+                identity='' if ordered else f' · Message {ordinal:06d}'
+                f.write(f"\n---\n\n## Step {step:06d}{identity} · {role} / {typ}\n\n")
                 f.write(f"Message ordinal: {ordinal} · Status: `{r.get('status','unknown')}`\n\n")
                 label=timestamps.markdown(r.get('created_at'))
                 if label:f.write(label+'\n\n')
@@ -102,17 +134,17 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
                     style=options.get('tool_outputs','full') if typ=='GENERIC' else 'full'
                     if style=='none':
                         f.write('[Tool output explicitly omitted from this Markdown view.]\n')
-                        tool_omissions.append({'step':step,'policy':'none','original_chars':len(text)})
+                        tool_omissions.append({'step':step,'source_ordinal':ordinal,'policy':'none','original_chars':len(text)})
                     elif style=='summary':
                         f.write(f'[Recorded tool output: {len(text):,} characters. Body omitted by summary policy.]\n')
-                        tool_omissions.append({'step':step,'policy':'summary','original_chars':len(text)})
+                        tool_omissions.append({'step':step,'source_ordinal':ordinal,'policy':'summary','original_chars':len(text)})
                     else:
                         limit=options.get('max_tool_chars',0) if typ=='GENERIC' else 0
                         if style=='tail': limit=limit or 20000
                         if limit and len(text)>limit:
                             excerpt=text[-limit:] if style=='tail' else text[:limit]
                             f.write(f'[View truncation: showing {len(excerpt):,} of {len(text):,} recorded characters.]\n\n')
-                            tool_omissions.append({'step':step,'policy':style,'original_chars':len(text),'shown_chars':len(excerpt)})
+                            tool_omissions.append({'step':step,'source_ordinal':ordinal,'policy':style,'original_chars':len(text),'shown_chars':len(excerpt)})
                             text=excerpt
                         if typ=='GENERIC' or options.get('literal',False): f.write(fence(text)+'\n')
                         else: f.write(text+('' if text.endswith('\n') else '\n')+'\n')
@@ -144,21 +176,52 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
                     normalized=original_text.replace('\\','/').lower()
                     marker=f"/brain/{session['id']}/.system_generated/steps/{step}/output.txt".lower()
                     if marker in normalized:
+                        if step not in step_multiplicity:
+                            step_multiplicity[step]=index.con.execute('SELECT COUNT(*) FROM events WHERE step=?',(step,)).fetchone()[0]
+                        if step_multiplicity[step]>1:
+                            if step not in ambiguous_recovery:
+                                ambiguous_recovery[step]={'step':step,'path':relative,
+                                    'native_step_occurrences':step_multiplicity[step],
+                                    'reason':'native step repeats; sidecar cannot be assigned to a source occurrence'}
+                            rendered+=1
+                            if progress: progress.update('render',rendered,selection['records'],unit='records')
+                            continue
                         if src.exists(relative):
                             path,receipt=src.snapshot(relative)
                             try: sidecar=path.read_text(encoding='utf-8',errors='strict')
                             except UnicodeError:
-                                recovery_missing.append({'step':step,'path':relative,'reason':'not valid UTF-8; preserve in native archive'})
+                                recovery_missing.append({'step':step,'source_ordinal':ordinal,'path':relative,'reason':'not valid UTF-8; preserve in native archive'})
                             else:
                                 f.write('### Additional recorded full-output sidecar\n\n')
                                 f.write('Original preview above is unchanged. This is separate recorded evidence from `'+relative+'`.\n\n')
                                 f.write(fence(redactor.text(sidecar))+'\n')
-                                recovered.append({'step':step,**receipt})
-                        else: recovery_missing.append({'step':step,'path':relative,'reason':'sidecar absent in supplied source'})
+                                recovered.append({'step':step,'source_ordinal':ordinal,**receipt})
+                        else: recovery_missing.append({'step':step,'source_ordinal':ordinal,'path':relative,'reason':'sidecar absent in supplied source'})
                 rendered+=1
                 if progress: progress.update('render',rendered,selection['records'],unit='records')
+            if pending and not ordered:
+                f.write('\n## Database-only session diagnostics — temporal placement unknown\n\n')
+                f.write('These rows are separate source evidence. Native index order does not establish when they occurred relative to the readable observations above.\n')
             while pending:
                 f.write(supplement_md(pending,redactor)); pending=next(supplemental,None)
+            for step,item in ambiguous_recovery.items():
+                relative=item['path']
+                if not all_selected:
+                    recovery_missing.append({**item,'reason':item['reason']+'; omitted from partial selection'})
+                    continue
+                if not src.exists(relative):
+                    recovery_missing.append({**item,'reason':item['reason']+'; sidecar absent in supplied source'})
+                    continue
+                path,receipt=src.snapshot(relative)
+                try: sidecar=path.read_text(encoding='utf-8',errors='strict')
+                except UnicodeError:
+                    recovery_missing.append({**item,'reason':item['reason']+'; not valid UTF-8, preserve via --include-artifacts'})
+                    continue
+                f.write(f'\n## Unassigned recorded output sidecar — native step {step}\n\n')
+                f.write('This path belongs to a repeated native step. Its content is preserved once as separate evidence; '
+                        'it is not attributed to any particular message, turn, or revision. Original previews above are unchanged.\n\n')
+                f.write('Recorded path: `'+relative+'`\n\n'+fence(redactor.text(sidecar))+'\n')
+                recovered.append({'step':step,'occurrence_assignment':'unknown','native_step_occurrences':item['native_step_occurrences'],**receipt})
             f.write('\n---\n\n## Export coverage notes\n\n')
             f.write('JSONL step gaps are not repaired or renumbered. Database-only diagnostics retain their own provenance.\n')
             f.write('Unknown events/fields remain in native source or structured JSONL. Code, model claims, and tool status are not independently validated by export.\n')
@@ -168,7 +231,8 @@ def render(index,session,selection,source_info,db_audit,supplements,destination,
     return {'markdown':destination,'records_jsonl':raw_jsonl,'unknown_sidecar':unknown_path,'recovered_outputs':recovered,
             'unavailable_recovery':recovery_missing,'view_omissions':tool_omissions,
             'credential_values_replaced':len(redactor.values),'credential_replacement_occurrences':redactor.replacements,
-            'supplemental_db_rows_rendered':[s['step_index'] for s in shown_supplements]}
+            'supplemental_db_rows_rendered':[s['step_index'] for s in shown_supplements],
+            'database_diagnostic_scope':diagnostic_scope}
 
 def edit_cards(calls):
     """Index recorded file operations; keep their full arguments above unchanged.
@@ -212,10 +276,19 @@ def count_text(path,tokenizer='none',encoding='cl100k_base',exact_max_bytes=64*1
         except ImportError:
             if tokenizer=='tiktoken': raise ExportError('tiktoken is not installed in the selected Python environment')
     done=0
+    token_pattern=re.compile(r'\w+|[^\w\s]')
+    word_pattern=re.compile(r'\w')
+    previous_word=False
     if progress:progress.update('tokenize-regex',0,total,detail='Approximate lexical token count',force=True)
     with path.open('r',encoding='utf-8',newline='') as f:
-        for line in f:
-            approx+=sum(1 for _ in re.finditer(r'\w+|[^\w\s]',line));done+=len(line.encode('utf-8'))
+        # Bound both Unicode input and match allocations, even for huge source lines.
+        # Chunk callbacks avoid per-line progress overhead on large transcripts.
+        for chunk in iter(lambda:f.read(65536),''):
+            approx+=len(token_pattern.findall(chunk))
+            # A word spanning adjacent chunks is one token, not two.
+            if previous_word and word_pattern.match(chunk):approx-=1
+            previous_word=word_pattern.fullmatch(chunk[-1]) is not None
+            done+=len(chunk.encode('utf-8'))
             if progress:progress.update('tokenize-regex',done,total)
     return {**result,'tokenizer':'regex','tokens':approx,'exact_for_selected_encoding':False,
             'note':'Regex token estimate, not Gemini/Claude/GPT model tokens'}
@@ -263,14 +336,19 @@ def make_review(markdown:Path, directory:Path, *, cap=1000000, progress=None):
 def handoff_text(session,index,db_audit,interruptions,selection):
     lines=['# Antigravity source and interruption index','',f"- Conversation: `{session['id']}`",f"- Title: {session['title']}",
            f"- JSONL records: {index.count}; selected: {selection['records']}",
+           f"- Source order: {index.audit.get('record_order_policy','captured_source_order')}; unique observation identity: source message ordinal",
+           f"- Repeated native-step occurrences: {index.audit.get('step_order',{}).get('duplicate_occurrences',0)}; backward transitions: {index.audit.get('step_order',{}).get('backward_transitions',0)}",
            f"- SQLite-only indices: {db_audit.get('db_only_steps',[])}",
            f"- Latest database-only quota record: {interruptions.get('latest_database_only_quota_step')}",
            '- Completion: NOT inferred from assistant messages or a DONE tool status.',
            '- All observed timestamps are historical source text, not a current quota promise.','',
-           '| User turn | JSONL step span | Assistant-text messages | Recorded quota indices | Completion evidence |',
-           '|---:|---|---:|---|---|']
+           '| Observed user turn | Source message span | Native-step range | Assistant-text messages | Recorded quota indices | Completion evidence |',
+           '|---:|---|---|---:|---|---|']
     for t in index.turns:
-        lines.append(f"| {t['turn']} | {t['first_step']}–{t['last_step']} | {t['assistant_text_messages']} | {t.get('database_only_quota_steps',[])} | {t['execution_complete']} |")
+        lines.append(f"| {t['turn']} | {t['first_ordinal']}–{t['last_ordinal']} | {t.get('min_step',t['first_step'])}–{t.get('max_step',t['last_step'])} | {t['assistant_text_messages']} | {t.get('database_only_quota_steps',[])} | {t['execution_complete']} |")
+    if not index.audit.get('step_order',{}).get('monotonic_unique',True):
+        lines+=['','Database-only quota rows have no inferred occurrence, turn, or latest-time assignment when native step numbers repeat or go backward.',
+                'Unassigned quota indices: '+json.dumps(interruptions.get('unassigned_database_only_quota_steps',[]))]
     lines+=['','## Latest interruption timestamp strings','',json.dumps(interruptions.get('timestamp_strings_in_latest_quota_step',[])),
             '', '## Independent project verification remains necessary','',
             'The transcript records activity and claims, not proof that the current workspace matches those claims. '

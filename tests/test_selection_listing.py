@@ -43,7 +43,8 @@ class SelectionTests(unittest.TestCase):
     def test_step_anchor_keeps_zero_and_original_coordinate(self):
         args = self.arguments(since_id='step:0')
         audit = resolve_since(self.index,args)
-        self.assertEqual(args.from_step,0)
+        self.assertEqual(args.from_message,1)
+        self.assertEqual(audit['first_step'],0)
         self.assertEqual(audit['turn'],1)
         self.assertTrue(audit['inclusive'])
 
@@ -56,7 +57,7 @@ class SelectionTests(unittest.TestCase):
             resolve_since(self.index,self.arguments(since_text='repeated anchor'))
         args=self.arguments(since_text='repeated anchor',since_occurrence=2)
         self.assertEqual(resolve_since(self.index,args)['turn'],3)
-        self.assertEqual(args.from_step,5)
+        self.assertEqual(args.from_message,5)
         with self.assertRaisesRegex(ExportError,'exceeds 2'):
             resolve_since(self.index,self.arguments(since_text='repeated anchor',since_occurrence=3))
 

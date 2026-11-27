@@ -1,5 +1,51 @@
 # Validation history and release boundary
 
+## v0.4.2 project exports and source order — 2026-11-27
+
+A supplied console log showed two project exports stopping during indexing after
+successful source capture. The v0.4.1 strict native-step check rejected a repeated
+or backward identifier. The current failing transcript itself was not supplied,
+so its exact repeated payload, final record count and remaining project members
+are not represented as tested. The console log alone does not identify replay,
+revision, corruption or application chronology.
+
+Synthetic regressions reproduce the rejected pattern and now verify:
+
+- Every source occurrence and exact native bytes, including changed/identical
+  repeated lines, backward unique IDs, CRLF, Unicode, NUL gaps and captured tails.
+- Accurate distinct-step gaps and bounded diagnostic examples; source-ordinal
+  selections and ambiguous since anchors; explicit strict rejection with context.
+- Distinct database coverage versus one-to-one identifier correspondence, and no
+  inferred quota-turn or latest-time placement for ambiguous native coordinates.
+- Full-source diagnostic/sidecar appendices, partial-view omission of payloads with
+  unknown association, unchanged previews and ordinary unique-step recovery.
+- A two-session project with repeated titles and nonmonotonic records, verified
+  grouped archives, byte-exact raw/structured record order, native capture and
+  review reconstruction, with original source hashes unchanged.
+- Deferred loose publication, no earlier output after a later malformed source,
+  retained unrelated preexisting files, and successful separate loose directories.
+- Repeated real bounded exports under rename, plus skip/error, ordinary multipart
+  names, digest-shortened long ASCII/Unicode names and literal template characters.
+- Bounded regex scans matching the reference regex across Unicode word boundaries,
+  punctuation, combining characters, CRLF, empty inputs and very long lines.
+
+A local Linux/CPython 3.12.14 benchmark compared the old and new counting passes
+on the same previously exported Markdown: 17,718,275 UTF-8 bytes, 238,974 LF-based
+lines and exactly 4,406,997 regex-estimate tokens. Three-run median counting time
+with plain progress fell from 2.676s to 0.729s (3.67x). This measures the counting
+function, not total export speed, compression throughput or Windows performance.
+On a separate 18,559,795-byte single-line Unicode fixture, peak Python-traced
+allocation fell from 145,817,121 to 2,102,959 bytes; these are `tracemalloc` values,
+not process RSS. Timing is evidence, not a flaky automated pass/fail threshold.
+
+The published version uses the existing six Linux/macOS/Windows Python 3.10/3.13
+validation legs, actual Windows PowerShell checks, real ZIP/LZMA tests and an
+installed-wheel check outside the source checkout. New installed-wheel checks
+exercise a source-order project export and explicit strict rejection. Publication
+waits for the exact candidate's gates. Available older source captures provide
+additional compatibility evidence; they cannot prove the outcome on a newer,
+unavailable raw transcript or claim complete application history.
+
 ## v0.4.1 diagnostics and session tables — 2026-11-27
 
 A reported failure reproduced in the unmodified v0.4.0 native CLI: `doctor`

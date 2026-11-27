@@ -11,6 +11,7 @@ from .storage import ExportError, Source, VARIANTS, UUID_RE, CHUNK, hash_file
 
 KNOWN_TYPES = {'USER_INPUT','PLANNER_RESPONSE','GENERIC','CHECKPOINT','SYSTEM_MESSAGE',
                'ERROR_MESSAGE','FINISH','KNOWLEDGE','CONVERSATION_SUMMARY'}
+ORDER_EXAMPLE_LIMIT = 32
 TRUNCATED = re.compile(r'(?i)(?:output (?:was|is) truncated|content truncated|<truncated \d+|partial read \(lines|\btruncated_fields\b)')
 
 def annotation_title(data):
@@ -104,14 +105,15 @@ def capture_transcript(src: Source, session, *, allow_reduced=False, verify_chun
 class EventIndex:
     """Metadata in SQLite; at most one decoded event is kept in Python memory."""
     def __init__(self, source:Path, path:Path, *, max_record_bytes=256*1024*1024,
-                 strict_events=False, skip_invalid=False, progress=None):
+                 strict_events=False, skip_invalid=False, strict_step_order=False, progress=None):
         self.source=source; self.path=path; self.con=sqlite3.connect(path)
         try:
-            self.con.execute('CREATE TABLE events (ord INTEGER PRIMARY KEY, step INTEGER UNIQUE, offset INTEGER, size INTEGER, '
+            self.con.execute('CREATE TABLE events (ord INTEGER PRIMARY KEY, step INTEGER, offset INTEGER, size INTEGER, '
                              'turn INTEGER, kind TEXT, source TEXT, status TEXT, timestamp TEXT, content_chars INTEGER, '
                              'thinking_chars INTEGER, tool_count INTEGER, assistant_text INTEGER, truncated INTEGER, sha256 TEXT)')
             self.counts=Counter(); self.unknown=Counter(); self.issues=[]; self.partial_tail=None
-            self.turns=[]; current=None; turn=0; ordinal=0; laststep=-1; gap_ranges=[]
+            self.turns=[]; current=None; turn=0; ordinal=0; laststep=-1
+            backward_transitions=0; backward_examples=[]
             self.source_gaps=[]; source_size=source.stat().st_size
             with source.open('rb') as f:
                 while True:
@@ -135,8 +137,14 @@ class EventIndex:
                         if not skip_invalid: raise ExportError(f'Completed malformed JSONL record at byte {offset}: {exc}') from exc
                         self.issues.append(issue); continue
                     step=record['step_index']
-                    if step<=laststep: raise ExportError(f'Duplicate/out-of-order step {step}; no silent deduplication')
-                    if step>laststep+1: gap_ranges.append([laststep+1,step-1])
+                    if strict_step_order and step<=laststep:
+                        raise ExportError(f'Duplicate/out-of-order step {step} at source record {ordinal+1}, '
+                                          f'byte {offset}; --strict-step-order requires increasing unique native steps')
+                    if step<laststep:
+                        backward_transitions+=1
+                        if len(backward_examples)<ORDER_EXAMPLE_LIMIT:
+                            backward_examples.append({'source_ordinal':ordinal+1,'step_index':step,'source_offset':offset,
+                                                      'previous_source_ordinal':ordinal,'previous_step_index':laststep})
                     laststep=step; ordinal+=1
                     typ=record.get('type','UNKNOWN'); role=record.get('source','UNKNOWN'); status=record.get('status','UNKNOWN')
                     if not all(isinstance(x,str) for x in (typ,role,status)): raise ExportError('Invalid type/source/status field')
@@ -144,7 +152,7 @@ class EventIndex:
                         self.unknown[typ]+=1
                         if strict_events: raise ExportError(f'Unrecognized event type: {typ}')
                     if typ=='USER_INPUT' and role=='USER_EXPLICIT':
-                        turn+=1; current={'turn':turn,'first_step':step,'last_step':step,'records':0,'tool_calls':0,
+                        turn+=1; current={'turn':turn,'first_step':step,'last_step':step,'min_step':step,'max_step':step,'records':0,'tool_calls':0,
                                          'assistant_text_messages':0,'first_ordinal':ordinal,'last_ordinal':ordinal,
                                          'start_utc':record.get('created_at'),'execution_complete':'not_established_by_transcript'}
                         self.turns.append(current)
@@ -160,7 +168,7 @@ class EventIndex:
                                       content_len,thinking_len,tool_count,assistant,trunc,hashlib.sha256(line).hexdigest()))
                     self.counts[f'{role}/{typ}/{status}']+=1
                     if current:
-                        current.update(last_step=step,last_ordinal=ordinal)
+                        current.update(last_step=step,last_ordinal=ordinal,min_step=min(current['min_step'],step),max_step=max(current['max_step'],step))
                         current['records']+=1; current['tool_calls']+=tool_count; current['assistant_text_messages']+=assistant
                         current['last_event_is_assistant_text']=bool(assistant and not tool_count)
                     if ordinal%1000==0: self.con.commit()
@@ -168,8 +176,14 @@ class EventIndex:
             self.con.commit()
             if not ordinal: raise ExportError('No valid transcript records')
             self.count=ordinal
+            self.con.execute('CREATE INDEX events_by_step ON events(step,sha256)')
+            step_order,gap_ranges=self._audit_step_order(strict_step_order,backward_transitions,backward_examples)
             first,last=self.con.execute('SELECT MIN(step),MAX(step) FROM events').fetchone()
             self.audit={'records':ordinal,'first_step':first,'last_step':last,'missing_step_ranges':gap_ranges,
+                        'first_source_step':self.con.execute('SELECT step FROM events WHERE ord=1').fetchone()[0],
+                        'last_source_step':laststep,'record_identity':'source_ordinal',
+                        'record_order_policy':'captured_source_order','step_order':step_order,
+                        'user_turn_definition':'Each recorded USER_EXPLICIT/USER_INPUT occurrence in source order; replay semantics are not inferred',
                         'partial_tail_deferred':self.partial_tail,'invalid_complete_records':self.issues,
                         'event_types':dict(self.counts),'unknown_types':dict(self.unknown),
                         'user_turns':turn,'tool_calls':self.con.execute('SELECT SUM(tool_count) FROM events').fetchone()[0],
@@ -179,6 +193,47 @@ class EventIndex:
         except BaseException:
             self.con.close()
             raise
+    def _audit_step_order(self,strict_requested,backward_transitions,backward_examples):
+        # Native step IDs are observed coordinates, not a unique event key. Keep
+        # all bytes/occurrences and use SQLite for counts rather than a Python
+        # dictionary of the transcript. Later arrivals may close earlier gaps.
+        distinct_steps=0; gap_ranges=[]; previous=-1
+        for step, in self.con.execute('SELECT step FROM events GROUP BY step ORDER BY step'):
+            if step>previous+1:gap_ranges.append([previous+1,step-1])
+            previous=step;distinct_steps+=1
+        duplicate_occurrences=self.count-distinct_steps
+        distinct_source_lines=self.con.execute(
+            'SELECT COUNT(*) FROM (SELECT 1 FROM events GROUP BY step,sha256)').fetchone()[0]
+        duplicate_step_ids=self.con.execute(
+            'SELECT COUNT(*) FROM (SELECT 1 FROM events GROUP BY step HAVING COUNT(*)>1)').fetchone()[0]
+        examples=[]
+        if duplicate_occurrences:
+            rows=self.con.execute(
+                'SELECT e.ord,e.step,e.offset,e.size,e.sha256,repeated.first_ordinal FROM events e '
+                'JOIN (SELECT step,MIN(ord) AS first_ordinal FROM events GROUP BY step HAVING COUNT(*)>1) repeated '
+                'ON e.step=repeated.step WHERE e.ord>repeated.first_ordinal ORDER BY e.ord LIMIT ?',
+                (ORDER_EXAMPLE_LIMIT,))
+            for ordinal,step,offset,size,digest,first_ordinal in rows:
+                identical=self.con.execute(
+                    'SELECT MIN(ord) FROM events WHERE step=? AND sha256=? AND ord<?',
+                    (step,digest,ordinal)).fetchone()[0]
+                examples.append({'source_ordinal':ordinal,'step_index':step,'source_offset':offset,
+                                 'source_bytes':size,'source_sha256':digest,'first_occurrence_ordinal':first_ordinal,
+                                 'identical_prior_ordinal':identical,
+                                 'classification':'identical_source_bytes' if identical is not None else 'different_source_bytes'})
+        return {'strict_requested':bool(strict_requested),
+                'monotonic_unique':not duplicate_occurrences and not backward_transitions,
+                'distinct_steps':distinct_steps,'duplicate_step_ids':duplicate_step_ids,
+                'duplicate_occurrences':duplicate_occurrences,
+                'duplicate_identical_source_bytes':self.count-distinct_source_lines,
+                'duplicate_different_source_bytes':distinct_source_lines-distinct_steps,
+                'backward_transitions':backward_transitions,
+                'duplicate_comparison':'SHA-256 of entire original JSONL line, including whitespace and line ending; semantic revision or replay is not inferred',
+                'examples_limit_per_kind':ORDER_EXAMPLE_LIMIT,
+                'examples':{'duplicate_occurrences':examples,'backward_transitions':backward_examples},
+                'examples_truncated':{'duplicate_occurrences':max(0,duplicate_occurrences-len(examples)),
+                                      'backward_transitions':max(0,backward_transitions-len(backward_examples))}},gap_ranges
+
     def close(self): self.con.close()
     def selection(self, args):
         clauses=[]; params=[]
@@ -215,6 +270,9 @@ class EventIndex:
         n,low,high=self.con.execute('SELECT COUNT(*),MIN(step),MAX(step) FROM selected').fetchone()
         if not n: raise ExportError('Selection matched no records')
         return {'records':n,'first_step':low,'last_step':high,'mode':mode,
+                'all_records_selected':n==self.count,'record_identity':'source_ordinal','source_order_preserved':True,
+                'distinct_steps':self.con.execute('SELECT COUNT(DISTINCT step) FROM selected').fetchone()[0],
+                'native_step_selector_policy':'All matching source occurrences, retained in captured source order; --message selects one ordinal',
                 'native_jsonl_scope':'byte-exact selected source records and disclosed gaps within selected intervals',
                 'first_ordinal':self.con.execute('SELECT MIN(ord) FROM selected').fetchone()[0],
                 'last_ordinal':self.con.execute('SELECT MAX(ord) FROM selected').fetchone()[0],
@@ -377,9 +435,16 @@ def audit_database(src:Source, session, index:EventIndex):
                                 'timestamp_strings_observed':sorted(set(times)),
                                 'text_leaves':leaves,'blob_hashes':{k:{'bytes':len(v),'sha256':hashlib.sha256(v).hexdigest()} for k,v in blobs.items()},
                                 'semantic_schema_decoded':False})
+        step_sets_match=not missing and not logonly
+        one_to_one_step_match=step_sets_match and n==index.count
         result={'available':True,'quick_check':'ok','cascade_id_matches':matches,'sqlite_records':n,
+                'jsonl_records':index.count,'jsonl_unique_steps':index.audit['step_order']['distinct_steps'],
+                'jsonl_duplicate_occurrences':index.audit['step_order']['duplicate_occurrences'],
+                'step_sets_match':step_sets_match,'one_to_one_step_match':one_to_one_step_match,
+                'comparison_scope':'Native step identifiers and multiplicity only; payload content and chronology are not compared',
+                'payloads_compared':False,
                 'sqlite_range':[lo,hi],'db_only_steps':missing,'log_only_steps':logonly,
-                'matched_exactly':not missing and not logonly,'snapshot':receipt,
+                'matched_exactly':one_to_one_step_match,'snapshot':receipt,
                 'opaque_or_wire_text_diagnostics_count':len(supplements),
                 'atomic_with_log':False}
         return result,supplements
@@ -393,22 +458,42 @@ def interruption_summary(index, supplements):
              (row.get('quota_bytes_observed') or row.get('http_429_bytes_observed'))]
     quota.sort(key=lambda row: row['step_index'])
     positions = [row['step_index'] for row in quota]
-    latest = quota[-1] if quota else None
+    ordered_unique = getattr(index,'audit',{}).get('step_order',{}).get('monotonic_unique',True)
+    highest = quota[-1] if quota else None
+    latest = highest if ordered_unique else None
     out = {
         'completion': 'not established; assistant text is not a completion signal',
         'database_only_quota_steps': positions,
         'latest_database_only_quota_step': latest['step_index'] if latest else None,
+        'highest_database_only_quota_step': highest['step_index'] if highest else None,
+        'quota_order_basis': 'increasing unique native JSONL steps' if ordered_unique else 'native step identifiers only; temporal order is not established',
+        'database_only_quota_turn_attribution': 'native step intervals' if ordered_unique else 'unassigned because JSONL native steps repeat or move backward',
+        'unassigned_database_only_quota_steps': [],
         'timestamp_strings_in_latest_quota_step': latest['timestamp_strings_observed'] if latest else [],
         'timestamps_are_historical_observations_not_live_service_predictions': True,
         'quota_detection_policy': 'observed SQLite error step_type 17 plus quota or HTTP 429 byte evidence',
         'non_error_quota_mentions_are_interruptions': False,
     }
+    if not ordered_unique:
+        # A missing database row has no captured JSONL ordinal. Native numeric
+        # intervals cannot identify which repeated/source-ordered user event owns it.
+        out['unassigned_database_only_quota_steps']=positions
+        for turn in index.turns:
+            turn['database_only_quota_steps']=[]
+            turn['database_only_quota_attribution']='unassigned; ambiguous native step ordering'
+            if turn.get('execution_complete')=='interrupted_by_recorded_quota_event':
+                turn['execution_complete']='not_established_by_transcript'
+        return out
+    out['unassigned_database_only_quota_steps']=positions[:bisect_left(positions,index.turns[0]['first_step'])] if index.turns else positions
     for number, turn in enumerate(index.turns):
         start = bisect_left(positions, turn['first_step'])
         end = (bisect_left(positions, index.turns[number + 1]['first_step'])
                if number + 1 < len(index.turns) else len(positions))
         in_turn = positions[start:end]
         turn['database_only_quota_steps'] = in_turn
+        turn['database_only_quota_attribution']='native step interval'
+        if turn.get('execution_complete')=='interrupted_by_recorded_quota_event':
+            turn['execution_complete']='not_established_by_transcript'
         if in_turn:
             turn['execution_complete'] = 'interrupted_by_recorded_quota_event'
     return out

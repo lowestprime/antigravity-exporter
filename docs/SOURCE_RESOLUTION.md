@@ -76,6 +76,15 @@ A reduced transcript still requires `--allow-reduced`. Catalog resolution never
 silently changes this fidelity choice and never declares missing source content
 complete.
 
+## Source record identity and order
+
+A native `step_index` is an observed application field, not a guaranteed unique
+or increasing record key. The exporter assigns a 1-based source ordinal to each
+valid captured JSONL observation and preserves every occurrence in byte order.
+Repeated IDs and backward transitions are diagnosed, not silently sorted or
+removed. See [record-order guarantees](RECORD_ORDER.md) for selection, SQLite
+coverage, tool-output sidecars and the explicit strict-order option.
+
 ## Direct compressed input
 
 `--jsonl` accepts a plain `.jsonl`, `.jsonl.gz`, `.jsonl.zst`, or `.jsonl.zstd`

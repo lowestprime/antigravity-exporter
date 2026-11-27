@@ -112,6 +112,7 @@ def parser():
         q.add_argument('--verify-db',action=argparse.BooleanOptionalAction,default=True)
         q.add_argument('--verify-chunks',action='store_true'); q.add_argument('--allow-reduced',action='store_true')
         q.add_argument('--strict-events',action='store_true'); q.add_argument('--skip-invalid',action='store_true')
+        q.add_argument('--strict-step-order',action='store_true',help='Reject repeated/backward native step IDs; default preserves every valid source record in captured order')
         q.add_argument('--max-record-bytes',type=_positive,default=256*1024*1024)
         q.add_argument('--progress-style',choices=['auto','rich','plain','json','off']); q.add_argument('--no-progress',action='store_true')
         q.add_argument('--sort'); q.add_argument('--sort-order',choices=['auto','asc','desc'])
@@ -276,9 +277,19 @@ def _open(path):
     else: subprocess.Popen(['open' if sys.platform=='darwin' else 'xdg-open',str(path)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 def reserve(out:Path,stem:str,collision):
+    import glob
+    from ._vendor.codex_archive.bounded_archive import archive_stem_digest
+
+    def occupied(candidate):
+        # A completed bounded set has part names but no plain <stem>.zip.
+        # Long multipart names retain this digest when their stem is shortened.
+        return ((out/(candidate+'.zip')).exists() or (out/(candidate+'.files')).exists()
+                or any(out.glob(glob.escape(candidate)+'.part*-of-*.zip'))
+                or any(out.glob('*-'+archive_stem_digest(out/(candidate+'.zip'))+'.part*-of-*.zip')))
+
     for suffix in range(0,10000):
         candidate=stem+('' if suffix==0 else f'_{suffix+1}')
-        if (out/(candidate+'.zip')).exists() or (out/(candidate+'.files')).exists():
+        if occupied(candidate):
             if collision=='skip': return None,None
             if collision=='error': raise ExportError('Output already exists')
             continue
@@ -387,9 +398,7 @@ def export_one(src,session,index,info,db_audit,supplements,args,options,stage,pr
                   'batch_selection':{'skipped_sessions':getattr(args,'skipped_sessions',[])},
                   'source_capture':info,'source_coverage':{**index.audit,'native_copy_contains_entire_captured_prefix':source_copy.get('byte_exact_captured_prefix',False)},'selection':selection,'turns':index.turns,
                   'database_audit':db_audit,'database_only_diagnostics':selected_diagnostics,
-                  'database_diagnostic_scope':{'policy':'selected step span plus terminal rows when the final JSONL event is selected',
-                      'included':len(selected_diagnostics),'outside_selection_omitted':len(supplements)-len(selected_diagnostics),
-                      'coverage_counts_scope':'entire captured session'},
+                  'database_diagnostic_scope':rendered['database_diagnostic_scope'],
                   'interruption':interruptions,'rendered_text':counts,
                   'redaction':{'enabled':options['redact'],'best_effort':True,'anonymized':False,
                                'credential_values_replaced':rendered['credential_values_replaced']},
@@ -406,6 +415,8 @@ def export_one(src,session,index,info,db_audit,supplements,args,options,stage,pr
         manifest_path=generated/(stem+'.manifest.json'); write_json(manifest_path,manifest); members[manifest_path.name]=manifest_path
         result={'id':session['id'],'variant':session['variant'],'title':redactor.text(session['title']),'exporter_version':__version__,'selected_records':selection['records'],
                 'database_coverage_matches':db_audit.get('matched_exactly'),
+                'database_step_sets_match':db_audit.get('step_sets_match'),
+                'source_step_order':index.audit.get('step_order',{}),
                 'db_only_steps':db_audit.get('db_only_steps',[]),'privacy':privacy,'counts':counts,
                 'latest_quota_record':interruptions['latest_database_only_quota_step'],
                 'manifest_sha256':hash_file(manifest_path),'native_source_included':options['copy_source'],
@@ -415,7 +426,7 @@ def export_one(src,session,index,info,db_audit,supplements,args,options,stage,pr
                 'native_artifact_scope':'entire selected session store' if (args.include_native or args.include_artifacts) else 'not requested'}
         expected={name:(value['sha256'],value['bytes']) for name,value in inventory.items()}
         expected[manifest_path.name]=(hash_file(manifest_path),manifest_path.stat().st_size)
-        if options['archive'] and getattr(args,'defer_archive',False):
+        if getattr(args,'defer_archive',False):
             deferred=True
             result.update(_members=members,_expected=expected,_manifest_name=manifest_path.name,
                           _markdown_name=md.name,_stem=stem,_lock=lock,_out=out,_stage=stage)
@@ -488,7 +499,7 @@ def verify_export(path, metadata=False, max_dictionary_mib=512):
 
 
 def publish_prepared(items,args,options,work,progress,archiver,skipped):
-    """Package prepared sessions only after selection/rendering all succeeded."""
+    """Publish prepared sessions only after selection/rendering all succeeded."""
     prepared=[item for item in items if '_members' in item]
     if not prepared:return items
     collisions=[{'id':item['id'],'variant':item['variant'],'reason':'output collision explicitly skipped'}
@@ -505,7 +516,7 @@ def publish_prepared(items,args,options,work,progress,archiver,skipped):
             checksum=hash_file(path)
             item['_expected'][item['_manifest_name']]=(checksum,path.stat().st_size)
             item['manifest_sha256']=checksum
-    grouped=len(prepared)>1 and not options['separate_archives']
+    grouped=options['archive'] and len(prepared)>1 and not options['separate_archives']
     groups=[prepared] if grouped else [[item] for item in prepared]
     batch_locks=[]
     try:
@@ -532,18 +543,33 @@ def publish_prepared(items,args,options,work,progress,archiver,skipped):
                     continue
                 batch_locks.append(lock)
             else:stem=first['_stem']
-            result=package_members(out/(stem+'.zip'),members,{**options,'work_dir':str(work)},
-                                   progress=progress,archiver=archiver,expected_checksums=expected)
+            result=(package_members(out/(stem+'.zip'),members,{**options,'work_dir':str(work)},
+                                    progress=progress,archiver=archiver,expected_checksums=expected)
+                    if options['archive'] else {})
             for item in group:
                 item.update(result);item['batch_sessions']=len(group);item['skipped_sessions']=skipped
-                item['cleanup_requested']=options['cleanup'];item['loose_outputs_retained']=not options['cleanup']
-                if not options['cleanup']:
+                item['cleanup_requested']=options['cleanup']
+                item['loose_outputs_retained']=not options['archive'] or not options['cleanup']
+                if item['loose_outputs_retained']:
                     loose=out/(item['_stem']+'.files');loose.mkdir(exist_ok=False)
-                    for name,path in item['_members'].items():
-                        target=loose/name;target.parent.mkdir(parents=True,exist_ok=True)
-                        publish_fresh(path,target,progress=progress)
+                    loose_members=members if not options['archive'] else item['_members']
+                    loose_expected=expected if not options['archive'] else item['_expected']
+                    total_bytes=sum(path.stat().st_size for path in loose_members.values());copied=0
+                    try:
+                        with progress.group('publish-loose-files',total=total_bytes,unit='bytes'):
+                            for name,path in loose_members.items():
+                                target=loose/name;target.parent.mkdir(parents=True,exist_ok=True)
+                                receipt=publish_fresh(path,target,progress=progress)
+                                if (receipt['sha256'],receipt['bytes'])!=loose_expected[name]:
+                                    raise ExportError('Prepared member changed before loose publication: '+name)
+                                copied+=receipt['bytes']
+                                progress.update('publish-loose-files',copied,total_bytes,detail=name)
+                    except BaseException:
+                        # This exclusive directory was created by this export.
+                        shutil.rmtree(loose)
+                        raise
                     item.update(loose_directory=str(loose),manifest=str(loose/item['_manifest_name']),markdown=str(loose/item['_markdown_name']))
-            if args.open_after:_open(Path(result['archive']))
+            if args.open_after:_open(Path(result['archive'] if options['archive'] else first['markdown']))
         if args.remember_out_dir:
             c=load_config();c['out_dir']=str(prepared[0]['_out']);save_config(c)
         return items
@@ -797,12 +823,22 @@ def run(args):
             progress.update('resolve-session',detail=session.get('selector',session['id']),force=True)
             if args.command=='audit' and src and not has_transcript(session,allow_reduced=args.allow_reduced):
                 result.append({'session':session,'source':None,'coverage':{'status':'source_unavailable','fidelity_loss_accepted':False}});continue
-            if args.direct_jsonl:
-                from .inputs import capture_direct
-                log,info=capture_direct(original,stage,progress=progress)
-            else:log,info=capture_transcript(src,session,allow_reduced=args.allow_reduced,verify_chunks=args.verify_chunks)
-            index=EventIndex(log,stage/'index.db',max_record_bytes=args.max_record_bytes,strict_events=args.strict_events,skip_invalid=args.skip_invalid,progress=progress)
+            index=None
+            source_label=str(original) if args.direct_jsonl else f"{session['variant']}/brain/{session['id']}/.system_generated/logs/"
             try:
+                if args.direct_jsonl:
+                    from .inputs import capture_direct
+                    log,info=capture_direct(original,stage,progress=progress)
+                else:log,info=capture_transcript(src,session,allow_reduced=args.allow_reduced,verify_chunks=args.verify_chunks)
+                source_label=info.get('relative_source',source_label)
+                index=EventIndex(log,stage/'index.db',max_record_bytes=args.max_record_bytes,
+                                 strict_events=args.strict_events,skip_invalid=args.skip_invalid,
+                                 strict_step_order=args.strict_step_order,progress=progress)
+                order=index.audit['step_order']
+                if is_export and not order['monotonic_unique']:
+                    print(f"WARNING: {session.get('selector',session['id'])}: preserving all {index.count} source records in captured order; "
+                          f"{order['duplicate_occurrences']} repeated native-step occurrence(s), {order['backward_transitions']} backward transition(s). "
+                          'See source_coverage.step_order in the manifest; no records were deduplicated or reordered.',file=sys.stderr)
                 db_audit,supplements=(audit_database(src,session,index) if args.verify_db and src else ({'available':False,'coverage':'not_checked'},[]))
                 interrupts=interruption_summary(index,supplements)
                 unavailable_history=[r['step_index'] for r in supplements if r.get('step_type')!=17]
@@ -815,7 +851,11 @@ def run(args):
                 elif args.command in ('records','responses'):
                     result.append({'session':session,'records':sort_rows(list(index.listing(args.command=='responses')),kind=args.command,sort=options['sort'],order=options['sort_order'])})
                 else:result.append(export_one(src,session,index,info,db_audit,supplements,copy.copy(args),options,stage,progress,archiver))
-            finally:index.close()
+            except ExportError as exc:
+                hint='' if args.keep_failed_work else ' Use --keep-failed-work to retain exporter staging for diagnosis.'
+                raise ExportError(f"Session {session.get('selector',session['id'])}; source {source_label}: {exc}"+hint) from exc
+            finally:
+                if index is not None:index.close()
         if is_export:result=publish_prepared(result,args,options,work,progress,archiver,skipped)
         success=True
         if len(result)==1:
@@ -866,7 +906,7 @@ def main(argv=None):
                 for block in result if isinstance(result,list) else [result]:
                     lines.append(block['session'].get('selector',block['session']['id'])+'  '+preview(block['session']['title'],140))
                     if args.command=='turns':
-                        for t in block['turns']:lines.append(f"Turn {t['turn']:4}  steps {t['first_step']}–{t['last_step']}  {t.get('start_utc') or 'time unknown'}  {t['preview']}")
+                        for t in block['turns']:lines.append(f"Turn {t['turn']:4}  messages {t['first_ordinal']}–{t['last_ordinal']}  native steps {t.get('min_step',t['first_step'])}–{t.get('max_step',t['last_step'])}  {t.get('start_utc') or 'time unknown'}  {t['preview']}")
                     else:
                         for r in block['records']:lines.append(f"Message {r['message']:5}  step {r['step']:6}  turn {r['turn']:4}  {r['type']}  {r['status']}  {r['time_utc'] or 'time unknown'}")
             print_listing(lines,settings=args._display,title='Antigravity '+args.command)

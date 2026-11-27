@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.2 — preserved record order and reliable project exports
+
+- Preserve every valid JSONL observation in captured source order when native step
+  IDs repeat or move backward. Source ordinals are unique; no deduplication, sorting,
+  renumbering or semantic revision/replay inference is performed.
+- Add explicit `--strict-step-order`, bounded anomaly examples and exact counters,
+  distinct-step gap calculation, observed turn ranges and source endpoint metadata.
+- Resolve inclusive `since` selections by source ordinal. Require an occurrence
+  for ambiguous native user anchors; `--step` retains every matching occurrence.
+- Distinguish database step-set agreement from one-to-one identifier correspondence.
+  Do not claim payload equality, latest-time order or inferred quota-turn attribution
+  where native steps repeat or go backward.
+- Retain historical-prefix database diagnostics in full-record exports, including
+  rows before the first readable event, without assigning older quota rows to later turns.
+- Append unassigned database diagnostics and duplicated-step full-output sidecars
+  separately in full views. Omit ambiguous payloads from partial selections while
+  retaining their omission reasons and original recorded previews.
+- Fix collision handling for ordinary and digest-shortened multipart names,
+  including literal template characters and rename/skip/error behavior.
+- Prepare every requested session before publishing loose batch/project exports;
+  verify copied members against prepared hashes and retain unrelated output files.
+  Add session/source context and a failed-work retention hint to source errors.
+- Replace per-line regex-token counting with bounded Unicode chunks and word-boundary
+  correction. Preserve token estimates, line/byte counts and progress semantics.
+- Add source-order, database, rendering, exact native/review reconstruction, multipart
+  retry, loose publication and installed-wheel project-export regressions.
+- Retain versioned current-user installation, existing archive/naming defaults,
+  settings, previous module versions and published releases.
+
 ## 0.4.1 — diagnostics and readable session listings
 
 - Fix the `doctor` command's `UnboundLocalError`: a conditional tokenizer import
