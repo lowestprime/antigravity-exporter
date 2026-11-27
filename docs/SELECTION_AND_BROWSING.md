@@ -44,6 +44,29 @@ its scope documented separately from rendered-mode filtering.
 
 ## List and browse
 
+`agy-sessions` displays descriptive headers for the session selector, conversation
+name, JSONL size, last-modified time, transcript source, SQLite database and
+project. A full variant-qualified selector remains available for exact selection.
+`--no-pager` and redirected output always use an aligned table; a narrow
+interactive pager can use labeled records so that no column or identity disappears.
+
+JSONL sizes use binary units (KiB, MiB, GiB) in the human view. They describe the
+full monolithic log when present, otherwise the sum of contiguous full-log
+chunks, otherwise an available reduced log. A missing usable source has no
+invented size; zero bytes is a real empty source. For ZIP inputs, the value is
+the member's uncompressed size, not its compressed storage size. Discovery
+reads filesystem/ZIP metadata rather than scanning every transcript. JSON
+output retains the exact integer `size` and its `size_basis`.
+
+Last modified is the **recorded conversation-catalog timestamp**, not the
+filesystem modification time of an export. Dates and times use the readable export timestamp format, for example
+`November 27, 2026 at 11:09:16 AM PST`, and honor the saved `timestamp_timezone`
+preference (local time by default). A timestamp with no recorded offset is
+labeled as such. Missing and invalid dates are explicit, and the original
+`modified` value remains in JSON. A full-log source means that file/chunk representation exists; it does
+not certify that every SQLite step is present in readable JSONL.
+
+
 ```powershell
 agy-sessions -Sort 'project:asc,modified:desc'
 agy-turns UUID -Sort turn:desc -PageSize 20
@@ -57,6 +80,26 @@ numbers; absent values sort last in either direction. Fields are validated for
 the listing kind. Interactive paging uses terminal height and restores terminal
 state when finished; redirected/JSON output remains complete and consumes no
 pager input.
+
+
+On capable terminals, a long listing opens an alternate screen. Pressing `q`
+closes that screen and restores the terminal contents from before the listing;
+the rows are therefore absent from ordinary scrollback. This does not mean
+session discovery returned an empty catalog. To retain all rows in scrollback:
+
+```powershell
+agy-sessions --no-pager
+agy-projects --no-pager
+```
+
+To make ordinary scrollback listings the saved default, use
+`agy-config --set pager=never`. Restore automatic paging with
+`agy-config --set pager=auto`; override either preference for one invocation
+with `--pager auto` or `--no-pager`. JSON remains complete independently:
+
+```powershell
+agy-sessions --json --no-progress | ConvertFrom-Json
+```
 
 The session browser supports search, page-relative rows/ranges, project views,
 selection baskets, sorting, refresh and inspection. It renders to stderr so

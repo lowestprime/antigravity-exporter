@@ -1,5 +1,38 @@
 # Validation history and release boundary
 
+## v0.4.1 diagnostics and session tables — 2026-11-27
+
+A reported failure reproduced in the unmodified v0.4.0 native CLI: `doctor`
+raised `UnboundLocalError` because the separate tokenizer branch bound a local
+`importlib` name. A successful installation and `--version` check did not cover
+that command. The fix uses a distinct metadata import and preserves doctor JSON.
+
+The previous helper tests discarded human listing output and did not execute
+`agy-doctor`. New regressions execute doctor as a real subprocess, parse its JSON,
+check the active interpreter and codec fields, and verify saved config bytes are
+unchanged. Additional cases cover reported archive-preflight errors, optional
+codec absence, saved/explicit tokenizer encoding, required-tokenizer failure,
+requirement precedence and missing distribution metadata. PowerShell now asserts
+actual doctor, tokenizer and human/JSON session/project/turn/record output.
+
+The installed-wheel gate runs outside the checkout with `PYTHONPATH` removed,
+checks the installed module origin and console entry point, and exercises doctor,
+tokenizer, version and synthetic human/JSON session listings. This replaces the
+former version-only package check.
+
+Actual PowerShell 7 over a pseudo-terminal confirmed that the session pager
+shows rows and restores the previous screen after `q`. Redirected output is
+complete. The pager implementation and defaults are unchanged; `--no-pager`
+retains the listing in scrollback. This is a display choice, not source loss.
+The session view now adds descriptive headers, JSONL sizes and recorded catalog
+modification times; raw JSON metadata remains available for exact parsing.
+
+The same six OS/Python validation legs and Windows PowerShell gates apply to
+this patch release. Publication waits for those gates; the release page links
+the exact workflow result. Synthetic tests do not prove access to a particular
+user's Windows terminal or data store.
+
+
 ## v0.4.0 preparation — 2026-11-26
 
 This section records the v0.4.0 work and its observed validation. The older
@@ -95,10 +128,10 @@ The configured release gate runs Python 3.10 and 3.13 on Linux, macOS and Window
 with hash-pinned official 7-Zip and real ZIP/LZMA checks in all six jobs. Windows
 jobs also execute the complete PowerShell validation script. A separate job
 builds and checks the wheel, source distribution and allowlisted portable ZIP,
-and runs the installed CLI outside the checkout. At the time this section was
-prepared, the v0.4.0 remote matrix and publication were still pending. Consult the
-release's linked workflow for the actual result; the older rc2 success below
-cannot certify v0.4.0.
+and runs the installed CLI outside the checkout. The v0.4.0 release validation and publication subsequently completed in
+[workflow 45909707305](https://github.com/lowestprime/antigravity-exporter/actions/runs/45909707305).
+That passing result did not cover the doctor command defect documented above;
+v0.4.1 adds direct diagnostic-command and installed-wheel coverage.
 
 Local Linux PowerShell tests do not prove Windows ACL inheritance, file sharing,
 clipboard/dialog behavior or execution in a particular customized Windows

@@ -4,7 +4,7 @@
 
 Local conversion asks the operating system for the offset at the event instant;
 never reuse today's fixed offset for historical records. IANA zones use Python's
-zoneinfo database. This module only formats Markdown and export metadata: native
+zoneinfo database. This module only formats displayed timestamps and export metadata: native
 JSONL bytes and source timestamp values remain unchanged.
 """
 from __future__ import annotations
@@ -99,9 +99,16 @@ def parse_source_timestamp(value: Any) -> datetime | None:
             return None
         if not _NUMBER.fullmatch(value):
             try:
-                # Python 3.10 fromisoformat does not accept a trailing Z.
-                return datetime.fromisoformat(value[:-1] + '+00:00'
-                                               if value[-1:] in {'Z', 'z'} else value)
+                # Python 3.10 accepts only 3/6 fractional digits. Normalize the
+                # parser input; the recorded value remains untouched in JSONL.
+                parser_value = value
+                fraction = re.fullmatch(
+                    r'(\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}:\d{2})[.,](\d+)(Z|z|[+-]\d{2}:\d{2})?', value)
+                if fraction:
+                    parser_value = (fraction.group(1) + '.' + fraction.group(2)[:6].ljust(6, '0') +
+                                    (fraction.group(3) or ''))
+                return datetime.fromisoformat(parser_value[:-1] + '+00:00'
+                                               if parser_value[-1:] in {'Z', 'z'} else parser_value)
             except ValueError:
                 return None
     if not isinstance(value, (int, float, Decimal, str)):

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.1 — diagnostics and readable session listings
+
+- Fix the `doctor` command's `UnboundLocalError`: a conditional tokenizer import
+  no longer creates an uninitialized function-local `importlib` name.
+- Report the effective saved tokenizer encoding, preserve explicit overrides,
+  and fail clearly when `--require-tiktoken` or the selected exact tokenizer
+  requires a package absent from the active interpreter. No package is installed.
+- Distinguish an importable tokenizer from absent distribution-version metadata;
+  diagnostics remain an availability probe and do not download encoding data.
+- Execute real doctor and tokenizer commands, assert human and JSON listing
+  content, and smoke-test the installed wheel outside the source checkout.
+- Add descriptive session-table headers, readable JSONL sizes, recorded last-modified
+  dates, explicit transcript availability and SQLite presence. Retain exact bytes
+  and original metadata in JSON output.
+- Document why the interactive pager restores the prior screen on `q`, plus
+  per-command and saved no-pager settings. Keep paging and export defaults.
+- Publish a separate versioned PowerShell upgrade; preserve existing profiles,
+  configuration, prior module versions, and previously published releases.
+
+
 ## 0.4.0 — source identity repair and Codex 0.5.2 archive parity
 
 - Resolve recorded catalog app_data_dir pointers before merging identities; add
