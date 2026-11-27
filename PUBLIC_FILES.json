@@ -329,8 +329,8 @@
       "sha256": "7ef2bd0f4ac055de325f559e3b61f3afe9c261710b7923763b1fe5c88ef69cc5"
     },
     "tests/test_v042_project_exports.py": {
-      "bytes": 11714,
-      "sha256": "de94ffaa71917efe02e622347f4b5feb3e8ea212d91182ab97daa3258234d772"
+      "bytes": 11787,
+      "sha256": "6d10d6525e471d2bba18dc8ab9bb49b003085b7c0a5f09507d3d9f48edc17d0f"
     },
     "tests/test_v042_render_order.py": {
       "bytes": 8418,

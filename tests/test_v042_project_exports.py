@@ -183,7 +183,8 @@ class ProjectExportTests(Base):
         self.assertEqual([item['id'] for item in results], [ID, SECOND_ID])
         directories = [Path(item['loose_directory']) for item in results]
         self.assertEqual(len(set(directories)), 2)
-        self.assertEqual(set(self.out.iterdir()), set(directories))
+        self.assertEqual({path.resolve() for path in self.out.iterdir()},
+                         {path.resolve() for path in directories})
         for item, directory in zip(results, directories):
             self.assertTrue(directory.name.endswith('.files'))
             self.assertNotIn('archive', item)
